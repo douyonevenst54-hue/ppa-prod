@@ -23,7 +23,6 @@ export default function WalletPage() {
   return (
     <div style={{ padding: "0 0 80px 0" }}>
 
-      {/* Header */}
       <div style={{
         padding: "20px 16px 12px",
         borderBottom: "1px solid var(--border)",
@@ -36,15 +35,12 @@ export default function WalletPage() {
         </Link>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>💰 PPA Wallet</div>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            Your earned balance
-          </div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Your earned balance</div>
         </div>
       </div>
 
       <div style={{ padding: 16 }}>
 
-        {/* Balance Card */}
         <div className="card" style={{
           marginBottom: 16,
           background: "linear-gradient(135deg, #1a1a2e, #16213e)",
@@ -61,13 +57,7 @@ export default function WalletPage() {
           <div style={{ fontSize: 16, color: "var(--text-secondary)" }}>PPA Tokens</div>
         </div>
 
-        {/* Today Summary */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gap: 10,
-          marginBottom: 20,
-        }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
           {[
             { label: "Earned Today", value: `+${todayEarned}`, color: "#00c9a7" },
             { label: "Spent Today", value: `-${todaySpent}`, color: "#ff6584" },
@@ -82,19 +72,11 @@ export default function WalletPage() {
           ))}
         </div>
 
-        {/* Use PPA Buttons */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 10,
-          marginBottom: 20,
-        }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
           <Link href="/predictions">
             <div className="card" style={{
-              textAlign: "center",
-              padding: "16px 12px",
-              cursor: "pointer",
-              border: "1px solid #6c63ff44",
+              textAlign: "center", padding: "16px 12px",
+              cursor: "pointer", border: "1px solid #6c63ff44",
             }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>🧠</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-primary)" }}>
@@ -104,10 +86,8 @@ export default function WalletPage() {
           </Link>
           <Link href="/challenges">
             <div className="card" style={{
-              textAlign: "center",
-              padding: "16px 12px",
-              cursor: "pointer",
-              border: "1px solid #ff658444",
+              textAlign: "center", padding: "16px 12px",
+              cursor: "pointer", border: "1px solid #ff658444",
             }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>🎯</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#ff6584" }}>
@@ -117,7 +97,6 @@ export default function WalletPage() {
           </Link>
         </div>
 
-        {/* Transaction History */}
         <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
           RECENT ACTIVITY
         </div>
@@ -129,7 +108,9 @@ export default function WalletPage() {
               justifyContent: "space-between",
               alignItems: "center",
               padding: "12px 0",
-              borderBottom: i < mockTransactions.length - 1 ? "1px solid var(--border)" : "none",
+              borderBottom: i < mockTransactions.length - 1
+                ? "1px solid var(--border)"
+                : "none",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{
@@ -155,13 +136,13 @@ export default function WalletPage() {
                 fontWeight: 700,
                 color: tx.amount > 0 ? "#00c9a7" : "#ff6584",
               }}>
-                {tx.amount > 0 ? "+" : ""}{tx.amount} PPA
+                {tx.amount > 0 ? "+" : ""}
+                {tx.amount} PPA
               </div>
             </div>
           ))}
         </div>
 
-        {/* Legal Note */}
         <div style={{
           marginTop: 16,
           padding: 12,
