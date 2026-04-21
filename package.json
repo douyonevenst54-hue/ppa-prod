@@ -3,15 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "next lint",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate"
   },
   "dependencies": {
-    "next": "16.2.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "@anthropic-ai/sdk": "^0.90.0",
+    "@prisma/client": "^5.22.0",
+    "date-fns": "^4.1.0",
+    "next": "^16.2.4",
+    "prisma": "^5.22.0",
+    "pusher": "^5.3.3",
+    "pusher-js": "^8.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -19,7 +30,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "15.3.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

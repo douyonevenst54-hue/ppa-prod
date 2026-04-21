@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserTier {
+  NEWCOMER
+  MEMBER
+  TRUSTED
+  EXPERT
+  ELITE
+}
+
+enum ContentStatus {
+  PENDING
+  ACTIVE
+  RESOLVED
+  ARCHIVED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum Category {
+  SPORTS
+  FINANCE
+  TECH
+  POLITICS
+  SOCIAL
+  GENERAL
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  piUserId           String    @unique
+  username           String    @unique
+  ppaBalance         Int       @default(100)
+  accuracyRate       Float     @default(0)
+  reputationScore    Float     @default(0)
+  streakDays         Int       @default(0)
+  lastActiveDate     DateTime?
+  tier               UserTier  @default(NEWCOMER)
+  totalPredictions   Int       @default(0)
+  correctPredictions Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  predictions      Prediction[]
+  challengeResults ChallengeResult[]
+  pollVotes        PollVote[]
+  createdContent   Content[]
+  transactions     PPATransaction[]
+}
+
+model Content {
+  id               String        @id @default(cuid())
+  creatorId        String
+  title            String
+  category         Category
+  status           ContentStatus @default(PENDING)
+  type             String
+  endsAt           DateTime
+  rewardPool       Int           @default(0)
+  participantCount Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  creator      User         @relation(fields: [creatorId], references: [id])
+  predictions  Prediction[]
+  pollOptions  PollOption[]
+  questions    Question[]
+}
+
+model Prediction {
+  id              String   @id @default(cuid())
+  userId          String
+  contentId       String
+  answer          String
+  confidenceLevel Int
+  stakeAmount     Int
+  potentialReward Int
+  isCorrect       Boolean?
+  ppaEarned       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  content Content @relation(fields: [contentId], references: [id])
+}
+
+model PollOption {
+  id        String   @id @default(cuid())
+  contentId String
+  text      String
+  voteCount Int      @default(0)
+  createdAt DateTime @default(now())
+
+  content Content    @relation(fields: [contentId], references: [id])
+  votes   PollVote[]
+}
+
+model PollVote {
+  id           String   @id @default(cuid())
+  userId       String
+  pollOptionId String
+  ppaWeight    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id])
+  pollOption PollOption @relation(fields: [pollOptionId], references: [id])
+
+  @@unique([userId, pollOptionId])
+}
+
+model Question {
+  id            String     @id @default(cuid())
+  contentId     String?
+  text          String
+  options       Json
+  correctAnswer String
+  category      Category
+  difficulty    Difficulty
+  qualityScore  Int        @default(0)
+  timesServed   Int        @default(0)
+  timesCorrect  Int        @default(0)
+  createdAt     DateTime   @default(now())
+
+  content  Content?          @relation(fields: [contentId], references: [id])
+  results  ChallengeResult[]
+}
+
+model ChallengeResult {
+  id          String   @id @default(cuid())
+  userId      String
+  questionId  String
+  isCorrect   Boolean
+  timeSeconds Int
+  ppaEarned   Int      @default(0)
+  streakBonus Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id])
+  question Question @relation(fields: [questionId], references: [id])
+}
+
+model PPATransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int
+  type      String
+  source    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
