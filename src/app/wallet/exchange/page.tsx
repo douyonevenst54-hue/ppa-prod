@@ -3,15 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { usePiPayment } from "@/hooks/usePiPayment";
 
 const PI_TO_PPA = 1000;
 const MIN_REDEEM = 5000;
 const MIN_ACCURACY = 65;
 
 export default function ExchangePage() {
-  const { user } = useAuth();
-  const { createPayment } = usePiPayment();
+  const { user, refreshUser } = useAuth();
   const [tab, setTab] = useState<"buy" | "redeem">("buy");
   const [piAmount, setPiAmount] = useState(1);
   const [ppaAmount, setPpaAmount] = useState(5000);
@@ -23,29 +21,100 @@ export default function ExchangePage() {
   const accuracyOk = (user?.accuracyRate || 0) * 100 >= MIN_ACCURACY;
   const balanceOk = (user?.ppaBalance || 0) >= ppaAmount;
 
-  const handleBuy = () => {
+  const handleBuy = async () => {
     if (!user) return;
     setLoading(true);
-    setStatus("⏳ Opening Pi payment...");
+    setStatus("⏳ Connecting to Pi...");
 
-    createPayment({
-      amount: piAmount,
-      memo: `Buy ${ppaFromPi} PPA on Pap-Pad-App`,
-      metadata: { type: "buy_ppa", userId: user.id, ppaAmount: ppaFromPi },
-      userId: user.id,
-      onSuccess: () => {
-        setStatus(`✅ Success! +${ppaFromPi} PPA added to your balance.`);
+    try {
+      let attempts = 0;
+      while (!window.Pi && attempts < 30) {
+        await new Promise(r => setTimeout(r, 300));
+        attempts++;
+      }
+
+      if (!window.Pi) {
+        setStatus("❌ Open in Pi Browser to make payments.");
         setLoading(false);
-      },
-      onCancel: () => {
-        setStatus("⚠️ Payment cancelled.");
-        setLoading(false);
-      },
-      onError: (err) => {
-        setStatus(`❌ ${err}`);
-        setLoading(false);
-      },
-    });
+        return;
+      }
+
+      window.Pi.init({
+        version: "2.0",
+        sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
+      });
+
+      await new Promise(r => setTimeout(r, 500));
+
+      setStatus("⏳ Authenticating with Pi...");
+      await window.Pi.authenticate(
+        ["username", "payments"],
+        async (payment) => {
+          try {
+            await fetch("/api/payments/approve", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                paymentId: (payment as { identifier: string }).identifier,
+              }),
+            });
+          } catch (e) {
+            console.error("Incomplete payment:", e);
+          }
+        }
+      );
+
+      setStatus("⏳ Opening payment dialog...");
+      window.Pi.createPayment(
+        {
+          amount: piAmount,
+          memo: `Buy ${ppaFromPi} PPA on Pap-Pad-App`,
+          metadata: { type: "buy_ppa", userId: user.id, ppaAmount: ppaFromPi },
+        },
+        {
+          onReadyForServerApproval: async (paymentId) => {
+            await fetch("/api/payments/approve", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paymentId }),
+            });
+          },
+          onReadyForServerCompletion: async (paymentId, txid) => {
+            const res = await fetch("/api/payments/exchange", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: user.id,
+                direction: "buy",
+                amount: piAmount,
+                paymentId,
+                txid,
+              }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              await refreshUser();
+              setStatus(`✅ Success! +${ppaFromPi} PPA added to your balance.`);
+            } else {
+              setStatus(`❌ ${data.error}`);
+            }
+            setLoading(false);
+          },
+          onCancel: () => {
+            setStatus("⚠️ Payment cancelled.");
+            setLoading(false);
+          },
+          onError: (error) => {
+            setStatus(`❌ ${error.message}`);
+            setLoading(false);
+          },
+        }
+      );
+    } catch (err) {
+      console.error("Buy error:", err);
+      setStatus("❌ Payment failed. Try again.");
+      setLoading(false);
+    }
   };
 
   const handleRedeem = async () => {
@@ -67,6 +136,7 @@ export default function ExchangePage() {
       const data = await res.json();
 
       if (data.success) {
+        await refreshUser();
         setStatus(`✅ Redemption queued! ${piFromPpa}π will arrive within 24h.`);
       } else {
         setStatus(`❌ ${data.error}`);
@@ -189,7 +259,8 @@ export default function ExchangePage() {
                 border: "1px solid #ff658444",
               }}>
                 <div style={{ fontSize: 13, color: "#ff6584" }}>
-                  ⚠️ You need {MIN_ACCURACY}% accuracy to redeem. Current: {Math.round((user?.accuracyRate || 0) * 100)}%
+                  ⚠️ You need {MIN_ACCURACY}% accuracy to redeem.
+                  Current: {Math.round((user?.accuracyRate || 0) * 100)}%
                 </div>
               </div>
             )}
@@ -207,7 +278,7 @@ export default function ExchangePage() {
                     color: ppaAmount === amt ? "var(--accent-gold)" : "var(--text-secondary)",
                     fontSize: 11, cursor: "pointer",
                   }}>
-                    {(amt/1000)}K
+                    {(amt / 1000)}K
                   </button>
                 ))}
               </div>
@@ -262,7 +333,8 @@ export default function ExchangePage() {
           fontSize: 12, color: "var(--text-secondary)",
           textAlign: "center", lineHeight: 1.5,
         }}>
-          🔒 PPA is an in-app utility token. Exchange rates are set by the platform treasury and may change.
+          🔒 PPA is an in-app utility token. Exchange rates are set by the
+          platform treasury and may change.
         </div>
 
       </div>

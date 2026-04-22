@@ -51,7 +51,6 @@ export function usePiAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check cached real user (not guest)
     const cached = localStorage.getItem("ppa_user");
     if (cached) {
       try {
@@ -75,7 +74,6 @@ export function usePiAuth() {
 
   async function initPiAuth() {
     try {
-      // Wait for Pi SDK
       let attempts = 0;
       while (!window.Pi && attempts < 30) {
         await new Promise(r => setTimeout(r, 300));
@@ -83,13 +81,11 @@ export function usePiAuth() {
       }
 
       if (!window.Pi) {
-        // Not in Pi Browser — block access
         setStatus("requires_pi_browser");
         setLoading(false);
         return;
       }
 
-      // Init Pi SDK
       window.Pi.init({
         version: "2.0",
         sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
@@ -97,7 +93,6 @@ export function usePiAuth() {
 
       await new Promise(r => setTimeout(r, 500));
 
-      // Authenticate with payments scope
       const auth = await window.Pi.authenticate(
         ["username", "payments"],
         async (payment) => {
@@ -142,11 +137,16 @@ export function usePiAuth() {
     }
   }
 
+  function updateUser(updatedUser: PPAUser) {
+    setUser(updatedUser);
+    localStorage.setItem("ppa_user", JSON.stringify(updatedUser));
+  }
+
   function signOut() {
     localStorage.removeItem("ppa_user");
     setUser(null);
     setStatus("requires_pi_browser");
   }
 
-  return { user, status, loading, signOut };
+  return { user, status, loading, signOut, updateUser };
 }
