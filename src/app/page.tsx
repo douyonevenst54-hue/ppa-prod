@@ -1,5 +1,6 @@
 import Link from "next/link";
 import HomeClient from "@/components/HomeClient";
+import StreakCard from "@/components/StreakCard";
 
 const CATEGORY_COLORS: Record<string, string> = {
   FINANCE: "#00c9a7",
@@ -81,25 +82,7 @@ export default async function HomePage() {
       <div style={{ padding: "16px" }}>
 
         {/* Section 1 — Daily Streak */}
-        <div className="card" style={{
-          marginBottom: 12,
-          background: "linear-gradient(135deg, #1a1a2e, #16213e)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}>
-          <div>
-            <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>
-              Daily Streak
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>🔥 3 Days</div>
-          </div>
-          <Link href="/challenges">
-            <button className="btn-primary" style={{ width: "auto", padding: "10px 16px", fontSize: 13 }}>
-              Complete Today
-            </button>
-          </Link>
-        </div>
+<StreakCard />
 
         {/* Section 2 — Featured Prediction */}
         {prediction && (

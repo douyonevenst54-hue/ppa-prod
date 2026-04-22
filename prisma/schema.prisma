@@ -47,6 +47,8 @@ model User {
   reputationScore    Float     @default(0)
   streakDays         Int       @default(0)
   lastActiveDate     DateTime?
+  lastStreakDate     DateTime?
+  longestStreak      Int       @default(0)
   tier               UserTier  @default(NEWCOMER)
   totalPredictions   Int       @default(0)
   correctPredictions Int       @default(0)
