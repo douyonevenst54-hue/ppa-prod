@@ -11,6 +11,26 @@ interface PaymentOptions {
   onError?: (error: string) => void;
 }
 
+async function ensurePiReady(): Promise<boolean> {
+  let attempts = 0;
+  while (!window.Pi && attempts < 30) {
+    await new Promise(r => setTimeout(r, 300));
+    attempts++;
+  }
+  if (!window.Pi) return false;
+
+  try {
+    window.Pi.init({
+      version: "2.0",
+      sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
+    });
+    await new Promise(r => setTimeout(r, 500));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function usePiPayment() {
   async function createPayment(options: PaymentOptions) {
     const {
@@ -24,7 +44,9 @@ export function usePiPayment() {
       onError,
     } = options;
 
-    if (!window.Pi) {
+    const ready = await ensurePiReady();
+
+    if (!ready || !window.Pi) {
       onError?.("Pi SDK not available. Open in Pi Browser.");
       return;
     }
