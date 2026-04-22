@@ -1,0 +1,17 @@
+# Pap-Pad-App Pi Network Configuration
+name = "Pap-Pad-App"
+description = "Predict. Challenge. Earn. A skill-based prediction and challenge platform on Pi Network."
+version = "1.0.0"
+
+[urls]
+app = "https://ppa-prod.vercel.app"
+privacy_policy = "https://ppa-prod.vercel.app/privacy"
+terms_of_service = "https://ppa-prod.vercel.app/terms"
+
+[permissions]
+payments = false
+username = true
+
+[developer]
+name = "Jhon Douyon"
+contact = "douyonevenst54@gmail.com"
