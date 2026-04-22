@@ -43,19 +43,26 @@ declare global {
   }
 }
 
+export type AuthStatus = "loading" | "authenticated" | "requires_pi_browser";
+
 export function usePiAuth() {
   const [user, setUser] = useState<PPAUser | null>(null);
+  const [status, setStatus] = useState<AuthStatus>("loading");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check cached real user (not guest)
     const cached = localStorage.getItem("ppa_user");
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        // Don't use cached guest accounts — always re-auth
-        if (parsed.username !== "Guest" && parsed.username !== "Demo_User") {
+        if (
+          parsed.piUserId &&
+          !parsed.piUserId.startsWith("demo_") &&
+          parsed.piUserId !== "demo_guest"
+        ) {
           setUser(parsed);
+          setStatus("authenticated");
           setLoading(false);
           return;
         }
@@ -68,7 +75,7 @@ export function usePiAuth() {
 
   async function initPiAuth() {
     try {
-      // Wait for Pi SDK to load
+      // Wait for Pi SDK
       let attempts = 0;
       while (!window.Pi && attempts < 30) {
         await new Promise(r => setTimeout(r, 300));
@@ -76,23 +83,23 @@ export function usePiAuth() {
       }
 
       if (!window.Pi) {
-        // Not in Pi Browser — use guest mode
-        await signInDemo();
+        // Not in Pi Browser — block access
+        setStatus("requires_pi_browser");
+        setLoading(false);
         return;
       }
 
-      // Initialize Pi SDK
+      // Init Pi SDK
       window.Pi.init({
         version: "2.0",
         sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
       });
 
-      // Small delay after init
       await new Promise(r => setTimeout(r, 500));
 
-      // Authenticate with Pi
+      // Authenticate with payments scope
       const auth = await window.Pi.authenticate(
-        ["username"],
+        ["username", "payments"],
         async (payment) => {
           console.log("Incomplete payment found:", payment);
           try {
@@ -109,17 +116,12 @@ export function usePiAuth() {
         }
       );
 
-      // Sign in with real Pi credentials
       await signInWithPi(auth.user.uid, auth.user.username);
+      setStatus("authenticated");
 
     } catch (err) {
       console.error("Pi auth error:", err);
-      if (!window.Pi) {
-        await signInDemo();
-      } else {
-        setError("Pi authentication failed. Please reload and try again.");
-        setLoading(false);
-      }
+      setStatus("requires_pi_browser");
     } finally {
       setLoading(false);
     }
@@ -140,30 +142,11 @@ export function usePiAuth() {
     }
   }
 
-  async function signInDemo() {
-    try {
-      const res = await fetch("/api/auth/pi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          piUserId: "demo_guest",
-          username: "Guest",
-        }),
-      });
-      const data = await res.json();
-      if (data.user) {
-        setUser(data.user);
-        localStorage.setItem("ppa_user", JSON.stringify(data.user));
-      }
-    } catch {
-      setError("Failed to sign in");
-    }
-  }
-
   function signOut() {
     localStorage.removeItem("ppa_user");
     setUser(null);
+    setStatus("requires_pi_browser");
   }
 
-  return { user, loading, error, signOut };
+  return { user, status, loading, signOut };
 }

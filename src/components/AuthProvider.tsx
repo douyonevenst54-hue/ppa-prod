@@ -1,19 +1,19 @@
 "use client";
 
 import { createContext, useContext, ReactNode } from "react";
-import { usePiAuth, PPAUser } from "@/hooks/usePiAuth";
+import { usePiAuth, PPAUser, AuthStatus } from "@/hooks/usePiAuth";
 
 interface AuthContextType {
   user: PPAUser | null;
+  status: AuthStatus;
   loading: boolean;
-  error: string | null;
   signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  status: "loading",
   loading: true,
-  error: null,
   signOut: () => {},
 });
 

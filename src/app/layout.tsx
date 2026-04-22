@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import { AuthProvider } from "@/components/AuthProvider";
+import PiBrowserGate from "@/components/PiBrowserGate";
 
 export const metadata: Metadata = {
   title: "Pap-Pad-App",
@@ -20,8 +21,10 @@ export default function RootLayout({
       </head>
       <body>
         <AuthProvider>
-          {children}
-          <BottomNav />
+          <PiBrowserGate>
+            {children}
+            <BottomNav />
+          </PiBrowserGate>
         </AuthProvider>
       </body>
     </html>
