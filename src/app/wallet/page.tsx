@@ -41,6 +41,7 @@ export default function WalletPage() {
 
       <div style={{ padding: 16 }}>
 
+        {/* Balance Card */}
         <div className="card" style={{
           marginBottom: 16,
           background: "linear-gradient(135deg, #1a1a2e, #16213e)",
@@ -57,7 +58,8 @@ export default function WalletPage() {
           <div style={{ fontSize: 16, color: "var(--text-secondary)" }}>PPA Tokens</div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
+        {/* Today Summary */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
           {[
             { label: "Earned Today", value: `+${todayEarned}`, color: "#00c9a7" },
             { label: "Spent Today", value: `-${todaySpent}`, color: "#ff6584" },
@@ -72,7 +74,8 @@ export default function WalletPage() {
           ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+        {/* Quick Actions */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
           <Link href="/predictions">
             <div className="card" style={{
               textAlign: "center", padding: "16px 12px",
@@ -97,6 +100,26 @@ export default function WalletPage() {
           </Link>
         </div>
 
+        {/* Exchange Button */}
+        <Link href="/wallet/exchange">
+          <div className="card" style={{
+            textAlign: "center",
+            padding: "16px 12px",
+            cursor: "pointer",
+            border: "1px solid #ffd70044",
+            marginBottom: 20,
+          }}>
+            <div style={{ fontSize: 24, marginBottom: 6 }}>⚡</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-gold)" }}>
+              PPA ⇄ Pi Exchange
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+              Buy PPA with $Pi or redeem PPA for $Pi
+            </div>
+          </div>
+        </Link>
+
+        {/* Transaction History */}
         <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
           RECENT ACTIVITY
         </div>
@@ -114,15 +137,10 @@ export default function WalletPage() {
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: "50%",
+                  width: 36, height: 36, borderRadius: "50%",
                   background: tx.amount > 0 ? "#00c9a722" : "#ff658422",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 16,
-                  flexShrink: 0,
+                  display: "flex", alignItems: "center",
+                  justifyContent: "center", fontSize: 16, flexShrink: 0,
                 }}>
                   {tx.amount > 0 ? "⬆️" : "⬇️"}
                 </div>
@@ -132,27 +150,21 @@ export default function WalletPage() {
                 </div>
               </div>
               <div style={{
-                fontSize: 15,
-                fontWeight: 700,
+                fontSize: 15, fontWeight: 700,
                 color: tx.amount > 0 ? "#00c9a7" : "#ff6584",
               }}>
-                {tx.amount > 0 ? "+" : ""}
-                {tx.amount} PPA
+                {tx.amount > 0 ? "+" : ""}{tx.amount} PPA
               </div>
             </div>
           ))}
         </div>
 
+        {/* Legal Note */}
         <div style={{
-          marginTop: 16,
-          padding: 12,
-          borderRadius: 10,
-          background: "var(--bg-card)",
-          border: "1px solid var(--border)",
-          fontSize: 12,
-          color: "var(--text-secondary)",
-          textAlign: "center",
-          lineHeight: 1.5,
+          marginTop: 16, padding: 12, borderRadius: 10,
+          background: "var(--bg-card)", border: "1px solid var(--border)",
+          fontSize: 12, color: "var(--text-secondary)",
+          textAlign: "center", lineHeight: 1.5,
         }}>
           🔒 PPA is an in-app utility token earned through skill.
           Used exclusively within Pap-Pad-App.
