@@ -1,26 +1,53 @@
-import Link from "next/link";
+"use client";
 
-const mockStats = {
-  totalCreated: 0,
-  totalEarned: 0,
-  engagementRate: 0,
-};
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
+
+interface CreatorStats {
+  totalCreated: number;
+  totalEarned: number;
+  predictions: number;
+  polls: number;
+  challenges: number;
+}
 
 export default function CreatorPage() {
+  const { user } = useAuth();
+  const [stats, setStats] = useState<CreatorStats>({
+    totalCreated: 0,
+    totalEarned: 0,
+    predictions: 0,
+    polls: 0,
+    challenges: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetchStats();
+  }, [user?.id]);
+
+  async function fetchStats() {
+    try {
+      const res = await fetch(`/api/creator/stats?userId=${user?.id}`);
+      const data = await res.json();
+      if (data.stats) setStats(data.stats);
+    } catch (err) {
+      console.error("Failed to fetch creator stats:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div style={{ padding: "0 0 80px 0" }}>
-
-      {/* Header */}
       <div style={{
         padding: "20px 16px 12px",
         borderBottom: "1px solid var(--border)",
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
+        display: "flex", alignItems: "center", gap: 12,
       }}>
-        <Link href="/" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 20 }}>
-          ←
-        </Link>
+        <Link href="/" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 20 }}>←</Link>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>🎨 Creator Hub</div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
@@ -32,16 +59,11 @@ export default function CreatorPage() {
       <div style={{ padding: 16 }}>
 
         {/* Stats */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gap: 10,
-          marginBottom: 20,
-        }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
           {[
-            { label: "Created", value: mockStats.totalCreated },
-            { label: "PPA Earned", value: mockStats.totalEarned },
-            { label: "Engagement", value: `${mockStats.engagementRate}%` },
+            { label: "Created", value: loading ? "..." : stats.totalCreated },
+            { label: "PPA Earned", value: loading ? "..." : stats.totalEarned },
+            { label: "Predictions", value: loading ? "..." : stats.predictions },
           ].map((stat) => (
             <div key={stat.label} className="card" style={{ textAlign: "center", padding: "12px 8px" }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-gold)", marginBottom: 2 }}>
@@ -62,7 +84,7 @@ export default function CreatorPage() {
             href: "/creator/new/prediction",
             icon: "🧠",
             title: "Create Prediction",
-            desc: "Post a yes/no or multiple choice prediction for the community",
+            desc: "Post a yes/no prediction for the community",
             color: "#6c63ff",
             reward: "Earn 2 PPA per participant",
           },
@@ -70,7 +92,7 @@ export default function CreatorPage() {
             href: "/creator/new/poll",
             icon: "🗳️",
             title: "Create Poll",
-            desc: "Ask the community anything — opinions, preferences, predictions",
+            desc: "Ask the community anything",
             color: "#00c9a7",
             reward: "Earn 1 PPA per vote",
           },
@@ -91,15 +113,10 @@ export default function CreatorPage() {
             }}>
               <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                 <div style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 12,
+                  width: 44, height: 44, borderRadius: 12,
                   background: item.color + "22",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 22,
-                  flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 22, flexShrink: 0,
                 }}>
                   {item.icon}
                 </div>
@@ -120,7 +137,7 @@ export default function CreatorPage() {
           </Link>
         ))}
 
-        {/* Info Card */}
+        {/* Info */}
         <div className="card" style={{
           background: "#6c63ff11",
           border: "1px solid #6c63ff44",
@@ -130,8 +147,8 @@ export default function CreatorPage() {
             ⭐ How Creator Earnings Work
           </div>
           <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            Every time someone interacts with your content — votes, plays, or predicts — you earn PPA automatically.
-            Higher engagement = more PPA. Quality content climbs the feed organically.
+            Every time someone interacts with your content you earn PPA automatically.
+            Higher engagement = more PPA.
           </div>
         </div>
 
