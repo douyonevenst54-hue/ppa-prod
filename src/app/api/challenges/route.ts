@@ -1,19 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const category = searchParams.get("category") || "ALL";
+
     const challenges = await prisma.content.findMany({
       where: {
         type: "challenge",
         status: "ACTIVE",
         endsAt: { gt: new Date() },
+        ...(category !== "ALL" && { category: category as never }),
       },
       include: {
         questions: true,
-        creator: {
-          select: { username: true },
-        },
+        creator: { select: { username: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -28,7 +30,7 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const {
       creatorId,
