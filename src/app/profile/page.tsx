@@ -172,26 +172,46 @@ export default function ProfilePage() {
         </div>
 
         {/* Prediction Stats */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
-            PREDICTION STATS
-          </div>
-          {[
-            { label: "Total Predictions", value: user.totalPredictions },
-            { label: "Correct Predictions", value: user.correctPredictions },
-            { label: "Accuracy Rate", value: `${accuracy}%` },
-            { label: "Wrong Predictions", value: user.totalPredictions - user.correctPredictions },
-          ].map((row) => (
-            <div key={row.label} style={{
-              display: "flex", justifyContent: "space-between",
-              padding: "10px 0", borderBottom: "1px solid var(--border)",
-              fontSize: 14,
-            }}>
-              <span style={{ color: "var(--text-secondary)" }}>{row.label}</span>
-              <span style={{ fontWeight: 600 }}>{row.value}</span>
-            </div>
-          ))}
-        </div>
+<div className="card" style={{ marginBottom: 16 }}>
+  <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
+    PREDICTION STATS
+  </div>
+  {[
+    { label: "Total Predictions", value: user.totalPredictions },
+    { label: "Correct Predictions", value: user.correctPredictions },
+    { label: "Prediction Accuracy", value: user.totalPredictions > 0 ? `${Math.round((user.correctPredictions / user.totalPredictions) * 100)}%` : "N/A" },
+  ].map((row) => (
+    <div key={row.label} style={{
+      display: "flex", justifyContent: "space-between",
+      padding: "10px 0", borderBottom: "1px solid var(--border)",
+      fontSize: 14,
+    }}>
+      <span style={{ color: "var(--text-secondary)" }}>{row.label}</span>
+      <span style={{ fontWeight: 600 }}>{row.value}</span>
+    </div>
+  ))}
+</div>
+
+{/* Challenge Stats */}
+<div className="card" style={{ marginBottom: 16 }}>
+  <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
+    CHALLENGE STATS
+  </div>
+  {[
+    { label: "Total Challenges", value: user.totalChallenges || 0 },
+    { label: "Correct Answers", value: user.correctChallenges || 0 },
+    { label: "Challenge Accuracy", value: (user.totalChallenges || 0) > 0 ? `${Math.round(((user.correctChallenges || 0) / (user.totalChallenges || 1)) * 100)}%` : "N/A" },
+  ].map((row) => (
+    <div key={row.label} style={{
+      display: "flex", justifyContent: "space-between",
+      padding: "10px 0", borderBottom: "1px solid var(--border)",
+      fontSize: 14,
+    }}>
+      <span style={{ color: "var(--text-secondary)" }}>{row.label}</span>
+      <span style={{ fontWeight: 600 }}>{row.value}</span>
+    </div>
+  ))}
+</div>
 
         {/* Tier Progress */}
         <div className="card" style={{ marginBottom: 16 }}>

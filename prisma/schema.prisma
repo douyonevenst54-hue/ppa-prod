@@ -52,6 +52,8 @@ model User {
   tier               UserTier  @default(NEWCOMER)
   totalPredictions   Int       @default(0)
   correctPredictions Int       @default(0)
+  totalChallenges    Int       @default(0)
+  correctChallenges  Int       @default(0)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

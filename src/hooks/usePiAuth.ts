@@ -13,6 +13,8 @@ export interface PPAUser {
   tier: string;
   totalPredictions: number;
   correctPredictions: number;
+  totalChallenges: number;
+  correctChallenges: number;
 }
 
 interface AuthResult {

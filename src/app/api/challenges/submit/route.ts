@@ -58,37 +58,45 @@ export async function POST(req: NextRequest) {
     const ppaEarned = baseReward + speedBonus + streakBonus + tierBonus;
 
     // Update user stats
-    const newTotalPredictions = user.totalPredictions + total;
-    const newCorrectPredictions = user.correctPredictions + correct;
-    const newAccuracyRate = newCorrectPredictions / newTotalPredictions;
+    const newTotalChallenges = (user.totalChallenges || 0) + total;
+const newCorrectChallenges = (user.correctChallenges || 0) + correct;
+const challengeAccuracy = newCorrectChallenges / newTotalChallenges;
+const predictionAccuracy = user.totalPredictions > 0
+  ? user.correctPredictions / user.totalPredictions
+  : 0;
+// Combined accuracy weighted by activity
+const totalActivity = newTotalChallenges + user.totalPredictions;
+const newAccuracyRate = totalActivity > 0
+  ? (newCorrectChallenges + user.correctPredictions) / totalActivity
+  : 0;
 
     // Determine new tier
-    function getTier(accuracy: number, total: number): string {
-      if (total < 10) return "NEWCOMER";
-      if (accuracy >= 0.85 && total >= 50) return "ELITE";
-      if (accuracy >= 0.75 && total >= 30) return "EXPERT";
-      if (accuracy >= 0.65 && total >= 20) return "TRUSTED";
-      if (total >= 10) return "MEMBER";
-      return "NEWCOMER";
-    }
+   function getTier(predAccuracy: number, predTotal: number): string {
+  if (predTotal < 10) return "NEWCOMER";
+  if (predAccuracy >= 0.85 && predTotal >= 50) return "ELITE";
+  if (predAccuracy >= 0.75 && predTotal >= 30) return "EXPERT";
+  if (predAccuracy >= 0.65 && predTotal >= 20) return "TRUSTED";
+  if (predTotal >= 10) return "MEMBER";
+  return "NEWCOMER";
+}
 
-    const newTier = getTier(newAccuracyRate, newTotalPredictions);
+const newTier = getTier(predictionAccuracy, user.totalPredictions);
     const newReputation = parseFloat(
       (newAccuracyRate * 10 * streakMultiplier).toFixed(2)
     );
 
     await prisma.user.update({
-      where: { id: userId },
-      data: {
-        ppaBalance: { increment: ppaEarned },
-        correctPredictions: { increment: correct },
-        totalPredictions: { increment: total },
-        accuracyRate: newAccuracyRate,
-        reputationScore: newReputation,
-        tier: newTier as "NEWCOMER" | "MEMBER" | "TRUSTED" | "EXPERT" | "ELITE",
-        lastActiveDate: new Date(),
-      },
-    });
+  where: { id: userId },
+  data: {
+    ppaBalance: { increment: ppaEarned },
+    totalChallenges: { increment: total },
+    correctChallenges: { increment: correct },
+    accuracyRate: newAccuracyRate,
+    reputationScore: newReputation,
+    tier: newTier as "NEWCOMER" | "MEMBER" | "TRUSTED" | "EXPERT" | "ELITE",
+    lastActiveDate: new Date(),
+  },
+});
 
     // Log transaction
     if (ppaEarned > 0) {
