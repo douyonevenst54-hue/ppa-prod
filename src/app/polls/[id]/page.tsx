@@ -1,36 +1,113 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
+import { useParams } from "next/navigation";
 
-const mockPoll = {
-  id: "1",
-  question: "Which crypto will outperform in Q2 2026?",
-  category: "FINANCE",
-  totalVotes: 1243,
-  endsAt: "2026-04-28T00:00:00Z",
-  options: [
-    { id: "a", text: "Bitcoin", votes: 487 },
-    { id: "b", text: "Ethereum", votes: 391 },
-    { id: "c", text: "Solana", votes: 241 },
-    { id: "d", text: "BNB", votes: 124 },
-  ],
-};
+interface PollOption {
+  id: string;
+  text: string;
+  voteCount: number;
+}
+
+interface Poll {
+  id: string;
+  title: string;
+  category: string;
+  participantCount: number;
+  endsAt: string;
+  pollOptions: PollOption[];
+}
 
 export default function PollVotePage() {
+  const params = useParams();
+  const pollId = params.id as string;
+  const { user, refreshUser } = useAuth();
+
+  const [poll, setPoll] = useState<Poll | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [voted, setVoted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [ppaWeight, setPpaWeight] = useState(0);
+  const [ppaEarned, setPpaEarned] = useState(0);
+  const [error, setError] = useState("");
 
-  const totalVotes = mockPoll.options.reduce((sum, o) => sum + o.votes, 0);
+  useEffect(() => {
+    fetchPoll();
+  }, [pollId]);
+
+  async function fetchPoll() {
+    try {
+      const res = await fetch(`/api/polls/${pollId}`);
+      const data = await res.json();
+      if (data.poll) setPoll(data.poll);
+    } catch (err) {
+      console.error("Failed to fetch poll:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const totalVotes = poll?.pollOptions.reduce((sum, o) => sum + o.voteCount, 0) || 0;
 
   const getPercent = (votes: number) =>
-    Math.round((votes / totalVotes) * 100);
+    totalVotes === 0 ? 0 : Math.round((votes / totalVotes) * 100);
 
-  const handleVote = () => {
-    if (!selected) return;
-    setVoted(true);
+  const handleVote = async () => {
+    if (!selected || !user?.id || submitting) return;
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/polls/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          pollOptionId: selected,
+          ppaWeight,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.error) {
+        setError(data.error);
+        setSubmitting(false);
+        return;
+      }
+
+      setPpaEarned(data.ppaEarned || 5);
+      await refreshUser();
+      await fetchPoll();
+      setVoted(true);
+    } catch {
+      setError("Failed to submit vote. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div style={{ padding: 16, textAlign: "center", paddingTop: 80, color: "var(--text-secondary)" }}>
+        Loading poll...
+      </div>
+    );
+  }
+
+  if (!poll) {
+    return (
+      <div style={{ padding: 16, textAlign: "center", paddingTop: 80, color: "var(--text-secondary)" }}>
+        Poll not found.
+        <Link href="/polls" style={{ display: "block", marginTop: 16, color: "var(--accent-primary)" }}>
+          ← Back to Polls
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "0 0 80px 0" }}>
@@ -43,9 +120,7 @@ export default function PollVotePage() {
         alignItems: "center",
         gap: 12,
       }}>
-        <Link href="/polls" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 20 }}>
-          ←
-        </Link>
+        <Link href="/polls" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 20 }}>←</Link>
         <div style={{ fontSize: 18, fontWeight: 700 }}>
           {voted ? "Poll Results" : "Cast Your Vote"}
         </div>
@@ -55,28 +130,20 @@ export default function PollVotePage() {
 
         {/* Question */}
         <div className="card" style={{ marginBottom: 16 }}>
-          <span className="badge" style={{
-            background: "#00c9a722",
-            color: "#00c9a7",
-            marginBottom: 10,
-            display: "inline-flex",
-          }}>
-            💹 FINANCE
-          </span>
           <div style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.5, marginBottom: 10 }}>
-            {mockPoll.question}
+            {poll.title}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            🗳️ {(totalVotes + (voted ? 1 : 0)).toLocaleString()} total votes
+            🗳️ {(totalVotes + (voted ? 0 : 0)).toLocaleString()} total votes
           </div>
         </div>
 
         {/* Options */}
         <div style={{ marginBottom: 16 }}>
-          {mockPoll.options.map((option) => {
-            const percent = getPercent(option.votes);
+          {poll.pollOptions.map((option) => {
+            const percent = getPercent(option.voteCount);
             const isSelected = selected === option.id;
-            const isWinner = voted && option.votes === Math.max(...mockPoll.options.map(o => o.votes));
+            const isWinner = voted && option.voteCount === Math.max(...poll.pollOptions.map(o => o.voteCount));
 
             return (
               <button
@@ -90,9 +157,7 @@ export default function PollVotePage() {
                   borderRadius: 12,
                   border: `2px solid ${isSelected || (voted && isSelected)
                     ? "var(--accent-primary)"
-                    : isWinner
-                    ? "#00c9a7"
-                    : "var(--border)"}`,
+                    : isWinner ? "#00c9a7" : "var(--border)"}`,
                   background: "var(--bg-card)",
                   cursor: voted ? "default" : "pointer",
                   position: "relative",
@@ -101,23 +166,14 @@ export default function PollVotePage() {
                   transition: "border-color 0.2s",
                 }}
               >
-                {/* Progress Fill */}
                 {voted && (
                   <div style={{
-                    position: "absolute",
-                    left: 0,
-                    top: 0,
-                    height: "100%",
-                    width: `${percent}%`,
-                    background: isSelected
-                      ? "#6c63ff22"
-                      : isWinner
-                      ? "#00c9a711"
-                      : "#ffffff08",
+                    position: "absolute", left: 0, top: 0,
+                    height: "100%", width: `${percent}%`,
+                    background: isSelected ? "#6c63ff22" : isWinner ? "#00c9a711" : "#ffffff08",
                     transition: "width 0.6s ease",
                   }} />
                 )}
-
                 <div style={{
                   position: "relative",
                   display: "flex",
@@ -127,9 +183,7 @@ export default function PollVotePage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     {!voted && (
                       <div style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: "50%",
+                        width: 20, height: 20, borderRadius: "50%",
                         border: `2px solid ${isSelected ? "var(--accent-primary)" : "var(--border)"}`,
                         background: isSelected ? "var(--accent-primary)" : "transparent",
                         flexShrink: 0,
@@ -147,8 +201,7 @@ export default function PollVotePage() {
                   </div>
                   {voted && (
                     <span style={{
-                      fontSize: 14,
-                      fontWeight: 700,
+                      fontSize: 14, fontWeight: 700,
                       color: isWinner ? "#00c9a7" : "var(--text-secondary)",
                     }}>
                       {percent}%
@@ -172,14 +225,11 @@ export default function PollVotePage() {
                   key={amount}
                   onClick={() => setPpaWeight(amount)}
                   style={{
-                    flex: 1,
-                    padding: "8px 4px",
-                    borderRadius: 8,
+                    flex: 1, padding: "8px 4px", borderRadius: 8,
                     border: `1px solid ${ppaWeight === amount ? "var(--accent-primary)" : "var(--border)"}`,
                     background: ppaWeight === amount ? "#6c63ff22" : "var(--bg-secondary)",
                     color: ppaWeight === amount ? "var(--accent-primary)" : "var(--text-secondary)",
-                    fontSize: 12,
-                    cursor: "pointer",
+                    fontSize: 12, cursor: "pointer",
                   }}
                 >
                   {amount === 0 ? "None" : `${amount} PPA`}
@@ -201,11 +251,22 @@ export default function PollVotePage() {
               PPA Earned for voting
             </div>
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--accent-gold)" }}>
-              +5 PPA
+              +{ppaEarned} PPA
             </div>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
               Added to your balance
             </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div style={{
+            marginBottom: 12, padding: 12, borderRadius: 10,
+            background: "#ff658422", border: "1px solid #ff658444",
+            fontSize: 13, color: "#ff6584", textAlign: "center",
+          }}>
+            ❌ {error}
           </div>
         )}
 
@@ -214,13 +275,13 @@ export default function PollVotePage() {
           <button
             className="btn-primary"
             onClick={handleVote}
-            disabled={!selected}
+            disabled={!selected || submitting}
             style={{
-              opacity: selected ? 1 : 0.4,
-              cursor: selected ? "pointer" : "not-allowed",
+              opacity: selected && !submitting ? 1 : 0.4,
+              cursor: selected && !submitting ? "pointer" : "not-allowed",
             }}
           >
-            Submit Vote
+            {submitting ? "Submitting..." : "Submit Vote"}
           </button>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
 
 const mockPrediction = {
-  id: "1",
+  id: "seed_pred_Will ETH s",
   title: "Will ETH surpass $4,000 by Friday?",
   description:
     "Ethereum has been trading between $3,200–$3,800 this week. With upcoming network upgrades and rising DeFi activity, analysts are split on whether ETH will break the $4,000 resistance before the weekend.",
@@ -23,23 +24,65 @@ const CONFIDENCE_MULTIPLIERS = ["", "1.2×", "1.8×", "3.0×"];
 
 export default function PredictionDetailPage() {
   const router = useRouter();
+  const params = useParams();
+  const predictionId = params.id as string;
+  const { user, refreshUser } = useAuth();
+
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [confidence, setConfidence] = useState(2);
   const [stake, setStake] = useState(10);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const potentialReward = Math.floor(
     stake * parseFloat(CONFIDENCE_MULTIPLIERS[confidence])
   );
 
-  const handleSubmit = () => {
-    if (!selectedAnswer) return;
-    const params = new URLSearchParams({
-      answer: selectedAnswer,
-      confidence: String(confidence),
-      stake: String(stake),
-      reward: String(potentialReward),
-    });
-    router.push(`/predictions/1/confirm?${params.toString()}`);
+  const handleSubmit = async () => {
+    if (!selectedAnswer || !user?.id) return;
+    if (user.ppaBalance < stake) {
+      setError("Insufficient PPA balance");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/predictions/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          contentId: predictionId,
+          answer: selectedAnswer,
+          confidenceLevel: confidence,
+          stakeAmount: stake,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.error) {
+        setError(data.error);
+        setSubmitting(false);
+        return;
+      }
+
+      await refreshUser();
+
+      const confirmParams = new URLSearchParams({
+        answer: selectedAnswer,
+        confidence: String(confidence),
+        stake: String(stake),
+        reward: String(data.potentialReward || potentialReward),
+      });
+
+      router.push(`/predictions/${predictionId}/confirm?${confirmParams.toString()}`);
+    } catch {
+      setError("Failed to submit prediction. Try again.");
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -88,6 +131,20 @@ export default function PredictionDetailPage() {
             <span>⏱ 3d left</span>
           </div>
         </div>
+
+        {/* Balance warning */}
+        {user && (
+          <div style={{
+            fontSize: 12,
+            color: "var(--text-secondary)",
+            marginBottom: 12,
+            textAlign: "right",
+          }}>
+            Balance: <span style={{ color: "var(--accent-gold)", fontWeight: 600 }}>
+              {user.ppaBalance} PPA
+            </span>
+          </div>
+        )}
 
         {/* Answer Selection */}
         <div style={{ marginBottom: 16 }}>
@@ -184,7 +241,6 @@ export default function PredictionDetailPage() {
             >+</button>
           </div>
 
-          {/* Quick Select */}
           <div style={{ display: "flex", gap: 8 }}>
             {[10, 25, 50, 100].map((amount) => (
               <button
@@ -207,9 +263,9 @@ export default function PredictionDetailPage() {
           </div>
         </div>
 
-        {/* Potential Reward Preview */}
+        {/* Potential Reward */}
         <div className="card" style={{
-          marginBottom: 20,
+          marginBottom: 16,
           background: "linear-gradient(135deg, #1a1a2e, #16213e)",
           border: "1px solid #6c63ff44",
         }}>
@@ -226,17 +282,33 @@ export default function PredictionDetailPage() {
           </div>
         </div>
 
+        {/* Error */}
+        {error && (
+          <div style={{
+            marginBottom: 12,
+            padding: 12,
+            borderRadius: 10,
+            background: "#ff658422",
+            border: "1px solid #ff658444",
+            fontSize: 13,
+            color: "#ff6584",
+            textAlign: "center",
+          }}>
+            ❌ {error}
+          </div>
+        )}
+
         {/* Submit */}
         <button
           className="btn-primary"
           onClick={handleSubmit}
-          disabled={!selectedAnswer}
+          disabled={!selectedAnswer || submitting}
           style={{
-            opacity: selectedAnswer ? 1 : 0.4,
-            cursor: selectedAnswer ? "pointer" : "not-allowed",
+            opacity: selectedAnswer && !submitting ? 1 : 0.4,
+            cursor: selectedAnswer && !submitting ? "pointer" : "not-allowed",
           }}
         >
-          Submit Prediction
+          {submitting ? "Submitting..." : "Submit Prediction"}
         </button>
 
       </div>
