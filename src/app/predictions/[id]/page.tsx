@@ -1,26 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 
-const mockPrediction = {
-  id: "seed_pred_Will ETH s",
-  title: "Will ETH surpass $4,000 by Friday?",
-  description:
-    "Ethereum has been trading between $3,200–$3,800 this week. With upcoming network upgrades and rising DeFi activity, analysts are split on whether ETH will break the $4,000 resistance before the weekend.",
-  category: "FINANCE",
-  participants: 142,
-  endsAt: "2026-04-25T00:00:00Z",
-  options: ["Yes", "No"],
-  minStake: 5,
-  maxStake: 500,
-};
+interface Prediction {
+  id: string;
+  title: string;
+  category: string;
+  participantCount: number;
+  endsAt: string;
+}
 
 const CONFIDENCE_LABELS = ["", "Low", "Medium", "High"];
 const CONFIDENCE_COLORS = ["", "#a0a0b8", "#ffd700", "#00c9a7"];
 const CONFIDENCE_MULTIPLIERS = ["", "1.2×", "1.8×", "3.0×"];
+
+const CATEGORY_COLORS: Record<string, string> = {
+  FINANCE: "#00c9a7",
+  SPORTS: "#ff6584",
+  TECH: "#6c63ff",
+  POLITICS: "#ffd700",
+  SOCIAL: "#ff9f43",
+  GENERAL: "#a0a0b8",
+};
+
+const CATEGORY_ICONS: Record<string, string> = {
+  FINANCE: "💹",
+  SPORTS: "⚽",
+  TECH: "💻",
+  POLITICS: "🏛️",
+  SOCIAL: "💬",
+  GENERAL: "🧠",
+};
+
+function timeLeft(endsAt: string): string {
+  const diff = new Date(endsAt).getTime() - Date.now();
+  if (diff <= 0) return "Ended";
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d left`;
+  return `${hours}h left`;
+}
 
 export default function PredictionDetailPage() {
   const router = useRouter();
@@ -28,11 +50,23 @@ export default function PredictionDetailPage() {
   const predictionId = params.id as string;
   const { user, refreshUser } = useAuth();
 
+  const [prediction, setPrediction] = useState<Prediction | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [confidence, setConfidence] = useState(2);
   const [stake, setStake] = useState(10);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch(`/api/predictions/${predictionId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.prediction) setPrediction(data.prediction);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [predictionId]);
 
   const potentialReward = Math.floor(
     stake * parseFloat(CONFIDENCE_MULTIPLIERS[confidence])
@@ -85,6 +119,28 @@ export default function PredictionDetailPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <div style={{ padding: 16, textAlign: "center", paddingTop: 80, color: "var(--text-secondary)" }}>
+        Loading prediction...
+      </div>
+    );
+  }
+
+  if (!prediction) {
+    return (
+      <div style={{ padding: 16, textAlign: "center", paddingTop: 80, color: "var(--text-secondary)" }}>
+        Prediction not found.
+        <Link href="/predictions" style={{ display: "block", marginTop: 16, color: "var(--accent-primary)" }}>
+          ← Back to Predictions
+        </Link>
+      </div>
+    );
+  }
+
+  const color = CATEGORY_COLORS[prediction.category] || "#a0a0b8";
+  const icon = CATEGORY_ICONS[prediction.category] || "🧠";
+
   return (
     <div style={{ padding: "0 0 80px 0" }}>
 
@@ -107,18 +163,15 @@ export default function PredictionDetailPage() {
         {/* Question Card */}
         <div className="card" style={{ marginBottom: 16 }}>
           <span className="badge" style={{
-            background: "#00c9a722",
-            color: "#00c9a7",
+            background: color + "22",
+            color: color,
             marginBottom: 10,
             display: "inline-flex",
           }}>
-            💹 FINANCE
+            {icon} {prediction.category}
           </span>
           <div style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.5, marginBottom: 10 }}>
-            {mockPrediction.title}
-          </div>
-          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            {mockPrediction.description}
+            {prediction.title}
           </div>
           <div style={{
             display: "flex",
@@ -127,12 +180,12 @@ export default function PredictionDetailPage() {
             fontSize: 12,
             color: "var(--text-secondary)",
           }}>
-            <span>👥 {mockPrediction.participants} participants</span>
-            <span>⏱ 3d left</span>
+            <span>👥 {prediction.participantCount} participants</span>
+            <span>⏱ {timeLeft(prediction.endsAt)}</span>
           </div>
         </div>
 
-        {/* Balance warning */}
+        {/* Balance */}
         {user && (
           <div style={{
             fontSize: 12,
@@ -140,7 +193,8 @@ export default function PredictionDetailPage() {
             marginBottom: 12,
             textAlign: "right",
           }}>
-            Balance: <span style={{ color: "var(--accent-gold)", fontWeight: 600 }}>
+            Balance:{" "}
+            <span style={{ color: "var(--accent-gold)", fontWeight: 600 }}>
               {user.ppaBalance} PPA
             </span>
           </div>
@@ -152,7 +206,7 @@ export default function PredictionDetailPage() {
             YOUR ANSWER
           </div>
           <div style={{ display: "flex", gap: 10 }}>
-            {mockPrediction.options.map((option) => (
+            {["Yes", "No"].map((option) => (
               <button
                 key={option}
                 onClick={() => setSelectedAnswer(option)}
@@ -175,7 +229,7 @@ export default function PredictionDetailPage() {
           </div>
         </div>
 
-        {/* Confidence Slider */}
+        {/* Confidence Level */}
         <div className="card" style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
             CONFIDENCE LEVEL
@@ -216,7 +270,7 @@ export default function PredictionDetailPage() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
             <button
-              onClick={() => setStake(Math.max(mockPrediction.minStake, stake - 5))}
+              onClick={() => setStake(Math.max(5, stake - 5))}
               style={{
                 width: 40, height: 40, borderRadius: "50%",
                 border: "1px solid var(--border)",
@@ -231,7 +285,7 @@ export default function PredictionDetailPage() {
               <span style={{ fontSize: 14, color: "var(--text-secondary)", marginLeft: 6 }}>PPA</span>
             </div>
             <button
-              onClick={() => setStake(Math.min(mockPrediction.maxStake, stake + 5))}
+              onClick={() => setStake(Math.min(500, stake + 5))}
               style={{
                 width: 40, height: 40, borderRadius: "50%",
                 border: "1px solid var(--border)",
@@ -247,14 +301,11 @@ export default function PredictionDetailPage() {
                 key={amount}
                 onClick={() => setStake(amount)}
                 style={{
-                  flex: 1,
-                  padding: "6px 4px",
-                  borderRadius: 8,
+                  flex: 1, padding: "6px 4px", borderRadius: 8,
                   border: `1px solid ${stake === amount ? "var(--accent-primary)" : "var(--border)"}`,
                   background: stake === amount ? "#6c63ff22" : "var(--bg-secondary)",
                   color: stake === amount ? "var(--accent-primary)" : "var(--text-secondary)",
-                  fontSize: 12,
-                  cursor: "pointer",
+                  fontSize: 12, cursor: "pointer",
                 }}
               >
                 {amount}
@@ -285,14 +336,9 @@ export default function PredictionDetailPage() {
         {/* Error */}
         {error && (
           <div style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 10,
-            background: "#ff658422",
-            border: "1px solid #ff658444",
-            fontSize: 13,
-            color: "#ff6584",
-            textAlign: "center",
+            marginBottom: 12, padding: 12, borderRadius: 10,
+            background: "#ff658422", border: "1px solid #ff658444",
+            fontSize: 13, color: "#ff6584", textAlign: "center",
           }}>
             ❌ {error}
           </div>
