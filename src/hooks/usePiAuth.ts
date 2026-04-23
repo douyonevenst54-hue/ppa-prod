@@ -11,6 +11,8 @@ export interface PPAUser {
   reputationScore: number;
   streakDays: number;
   tier: string;
+  totalPredictions: number;
+  correctPredictions: number;
 }
 
 interface AuthResult {
