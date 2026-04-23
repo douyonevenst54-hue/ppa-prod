@@ -56,7 +56,7 @@ async function seed() {
       where: { id: `seed_pred_${p.title.slice(0, 10)}` },
       update: {},
       create: {
-        id: `seed_pred_${p.title.slice(0, 10)}`,
+        id: `seed_pred_${p.title.slice(0, 10).replace(/\s+/g, '_')}`,
         creatorId: systemUser.id,
         title: p.title,
         category: p.category,
@@ -105,7 +105,7 @@ async function seed() {
       where: { id: `seed_poll_${p.title.slice(0, 10)}` },
       update: {},
       create: {
-        id: `seed_poll_${p.title.slice(0, 10)}`,
+        id: `seed_poll_${p.title.slice(0, 10).replace(/\s+/g, '_')}`,
         creatorId: systemUser.id,
         title: p.title,
         category: p.category,
@@ -229,7 +229,7 @@ async function seed() {
       where: { id: `seed_chal_${c.title.slice(0, 10)}` },
       update: {},
       create: {
-        id: `seed_chal_${c.title.slice(0, 10)}`,
+        id: `seed_chal_${c.title.slice(0, 10).replace(/\s+/g, '_')}`,
         creatorId: systemUser.id,
         title: c.title,
         category: c.category,
