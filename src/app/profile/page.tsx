@@ -112,8 +112,20 @@ export default function ProfilePage() {
             color: tierColor,
           }}>
             ⭐ {TIER_LABELS[user.tier]}
-          </span>
-        </div>
+          {/* Share Profile */}
+          <div style={{ marginTop: 8 }}>
+  <Link href={`/profile/${user.username}`}>
+    <button style={{
+      padding: "6px 16px", borderRadius: 20,
+      border: "1px solid var(--border)",
+      background: "transparent",
+      color: "var(--text-secondary)",
+      fontSize: 12, cursor: "pointer",
+    }}>
+      🔗 View Public Profile
+    </button>
+  </Link>
+</div>
 
         {/* Balance Card */}
         <div className="card" style={{
