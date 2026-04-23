@@ -1,36 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
 
 const TABS = ["Predictors", "Players", "Creators"];
-
-const mockPredictors = [
-  { rank: 1, username: "Alex_Pi", accuracy: 87, reputation: 4.8, tier: "ELITE", streak: 14 },
-  { rank: 2, username: "Maria_K", accuracy: 82, reputation: 4.5, tier: "EXPERT", streak: 9 },
-  { rank: 3, username: "Dev_Jon", accuracy: 79, reputation: 4.2, tier: "TRUSTED", streak: 7 },
-  { rank: 4, username: "Crypto_Z", accuracy: 75, reputation: 3.9, tier: "TRUSTED", streak: 5 },
-  { rank: 5, username: "PiKing", accuracy: 72, reputation: 3.7, tier: "MEMBER", streak: 3 },
-  { rank: 6, username: "Jhon_D", accuracy: 0, reputation: 0, tier: "MEMBER", streak: 3, isMe: true },
-];
-
-const mockPlayers = [
-  { rank: 1, username: "QuizMaster", score: 9840, accuracy: 91, tier: "ELITE", streak: 21 },
-  { rank: 2, username: "BrainPi", score: 8720, accuracy: 88, tier: "ELITE", streak: 18 },
-  { rank: 3, username: "FastFingers", score: 7650, accuracy: 84, tier: "EXPERT", streak: 12 },
-  { rank: 4, username: "Alex_Pi", score: 6430, accuracy: 79, tier: "EXPERT", streak: 8 },
-  { rank: 5, username: "Maria_K", score: 5210, accuracy: 76, tier: "TRUSTED", streak: 6 },
-  { rank: 6, username: "Jhon_D", score: 0, accuracy: 0, tier: "MEMBER", streak: 3, isMe: true },
-];
-
-const mockCreators = [
-  { rank: 1, username: "ContentKing", contributions: 142, earned: 2840, tier: "ELITE" },
-  { rank: 2, username: "PollMaster", contributions: 98, earned: 1960, tier: "EXPERT" },
-  { rank: 3, username: "PredictPro", contributions: 76, earned: 1520, tier: "EXPERT" },
-  { rank: 4, username: "QuizBuilder", contributions: 54, earned: 1080, tier: "TRUSTED" },
-  { rank: 5, username: "Maria_K", contributions: 41, earned: 820, tier: "TRUSTED" },
-  { rank: 6, username: "Jhon_D", contributions: 0, earned: 0, tier: "MEMBER", isMe: true },
-];
 
 const TIER_COLORS: Record<string, string> = {
   NEWCOMER: "#a0a0b8",
@@ -46,165 +20,123 @@ const RANK_STYLES: Record<number, { bg: string; color: string; icon: string }> =
   3: { bg: "#cd7f3222", color: "#cd7f32", icon: "🥉" },
 };
 
+interface LeaderboardUser {
+  id: string;
+  username: string;
+  accuracyRate?: number;
+  reputationScore?: number;
+  tier: string;
+  streakDays?: number;
+  _count?: { createdContent: number };
+}
+
 export default function LeaderboardPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
+  const [data, setData] = useState<LeaderboardUser[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const renderPredictors = () => (
-    <>
-      {mockPredictors.map((user) => (
-        <div key={user.username} className="card" style={{
-          marginBottom: 10,
-          border: user.isMe ? "1px solid var(--accent-primary)" : "1px solid var(--border)",
-          background: user.isMe ? "#6c63ff11" : "var(--bg-card)",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+  const tabTypes = ["predictors", "players", "creators"];
 
-            {/* Rank */}
-            <div style={{
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              background: RANK_STYLES[user.rank]?.bg || "var(--bg-secondary)",
-              color: RANK_STYLES[user.rank]?.color || "var(--text-secondary)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              fontSize: user.rank <= 3 ? 18 : 14,
-              flexShrink: 0,
-            }}>
-              {user.rank <= 3 ? RANK_STYLES[user.rank].icon : `#${user.rank}`}
-            </div>
+  useEffect(() => {
+    fetchLeaderboard(tabTypes[activeTab]);
+  }, [activeTab]);
 
-            {/* Info */}
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <span style={{ fontSize: 15, fontWeight: 600 }}>
-                  {user.username}
+  async function fetchLeaderboard(type: string) {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/leaderboard?type=${type}`);
+      const json = await res.json();
+      setData(json.users || []);
+    } catch (err) {
+      console.error("Failed to fetch leaderboard:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const renderEntry = (entry: LeaderboardUser, rank: number) => {
+    const isMe = entry.id === user?.id;
+    const rankStyle = RANK_STYLES[rank];
+
+    return (
+      <div key={entry.id} className="card" style={{
+        marginBottom: 10,
+        border: isMe ? "1px solid var(--accent-primary)" : "1px solid var(--border)",
+        background: isMe ? "#6c63ff11" : "var(--bg-card)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+
+          {/* Rank */}
+          <div style={{
+            width: 36, height: 36, borderRadius: "50%",
+            background: rankStyle?.bg || "var(--bg-secondary)",
+            color: rankStyle?.color || "var(--text-secondary)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontWeight: 700,
+            fontSize: rank <= 3 ? 18 : 14,
+            flexShrink: 0,
+          }}>
+            {rank <= 3 ? rankStyle.icon : `#${rank}`}
+          </div>
+
+          {/* Info */}
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>
+                {entry.username}
+              </span>
+              {isMe && (
+                <span style={{ fontSize: 11, color: "var(--accent-primary)", fontWeight: 600 }}>
+                  YOU
                 </span>
-                {user.isMe && (
-                  <span style={{ fontSize: 11, color: "var(--accent-primary)", fontWeight: 600 }}>
-                    YOU
-                  </span>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 10, fontSize: 12, color: "var(--text-secondary)" }}>
-                <span>🔥 {user.streak} streak</span>
-                <span style={{ color: TIER_COLORS[user.tier] }}>⭐ {user.tier}</span>
-              </div>
+              )}
             </div>
-
-            {/* Accuracy */}
-            <div style={{ textAlign: "right" }}>
-              <div style={{
-                fontSize: 20,
-                fontWeight: 700,
-                color: user.accuracy >= 75 ? "#00c9a7" : user.accuracy >= 50 ? "#ffd700" : "var(--text-secondary)",
-              }}>
-                {user.accuracy}%
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>accuracy</div>
+            <div style={{ display: "flex", gap: 10, fontSize: 12, color: "var(--text-secondary)" }}>
+              {entry.streakDays !== undefined && (
+                <span>🔥 {entry.streakDays} streak</span>
+              )}
+              <span style={{ color: TIER_COLORS[entry.tier] }}>
+                ⭐ {entry.tier}
+              </span>
             </div>
           </div>
-        </div>
-      ))}
-    </>
-  );
 
-  const renderPlayers = () => (
-    <>
-      {mockPlayers.map((user) => (
-        <div key={user.username} className="card" style={{
-          marginBottom: 10,
-          border: user.isMe ? "1px solid var(--accent-primary)" : "1px solid var(--border)",
-          background: user.isMe ? "#6c63ff11" : "var(--bg-card)",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              background: RANK_STYLES[user.rank]?.bg || "var(--bg-secondary)",
-              color: RANK_STYLES[user.rank]?.color || "var(--text-secondary)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              fontSize: user.rank <= 3 ? 18 : 14,
-              flexShrink: 0,
-            }}>
-              {user.rank <= 3 ? RANK_STYLES[user.rank].icon : `#${user.rank}`}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <span style={{ fontSize: 15, fontWeight: 600 }}>{user.username}</span>
-                {user.isMe && (
-                  <span style={{ fontSize: 11, color: "var(--accent-primary)", fontWeight: 600 }}>YOU</span>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 10, fontSize: 12, color: "var(--text-secondary)" }}>
-                <span>🔥 {user.streak} streak</span>
-                <span style={{ color: TIER_COLORS[user.tier] }}>⭐ {user.tier}</span>
-              </div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-gold)" }}>
-                {user.score.toLocaleString()}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>points</div>
-            </div>
+          {/* Metric */}
+          <div style={{ textAlign: "right" }}>
+            {activeTab === 0 && (
+              <>
+                <div style={{
+                  fontSize: 20, fontWeight: 700,
+                  color: (entry.accuracyRate || 0) >= 0.75 ? "#00c9a7" :
+                         (entry.accuracyRate || 0) >= 0.5 ? "#ffd700" : "var(--text-secondary)",
+                }}>
+                  {Math.round((entry.accuracyRate || 0) * 100)}%
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>accuracy</div>
+              </>
+            )}
+            {activeTab === 1 && (
+              <>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "var(--accent-gold)" }}>
+                  {(entry.reputationScore || 0).toFixed(1)}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>reputation</div>
+              </>
+            )}
+            {activeTab === 2 && (
+              <>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "var(--accent-gold)" }}>
+                  {entry._count?.createdContent || 0}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>contributions</div>
+              </>
+            )}
           </div>
         </div>
-      ))}
-    </>
-  );
-
-  const renderCreators = () => (
-    <>
-      {mockCreators.map((user) => (
-        <div key={user.username} className="card" style={{
-          marginBottom: 10,
-          border: user.isMe ? "1px solid var(--accent-primary)" : "1px solid var(--border)",
-          background: user.isMe ? "#6c63ff11" : "var(--bg-card)",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              background: RANK_STYLES[user.rank]?.bg || "var(--bg-secondary)",
-              color: RANK_STYLES[user.rank]?.color || "var(--text-secondary)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 700,
-              fontSize: user.rank <= 3 ? 18 : 14,
-              flexShrink: 0,
-            }}>
-              {user.rank <= 3 ? RANK_STYLES[user.rank].icon : `#${user.rank}`}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <span style={{ fontSize: 15, fontWeight: 600 }}>{user.username}</span>
-                {user.isMe && (
-                  <span style={{ fontSize: 11, color: "var(--accent-primary)", fontWeight: 600 }}>YOU</span>
-                )}
-              </div>
-              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                📝 {user.contributions} contributions
-              </div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-gold)" }}>
-                {user.earned.toLocaleString()}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>PPA earned</div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </>
-  );
+      </div>
+    );
+  };
 
   return (
     <div style={{ padding: "0 0 80px 0" }}>
@@ -232,27 +164,19 @@ export default function LeaderboardPage() {
 
         {/* Tabs */}
         <div style={{
-          display: "flex",
-          gap: 8,
-          marginBottom: 20,
-          background: "var(--bg-card)",
-          padding: 4,
-          borderRadius: 12,
+          display: "flex", gap: 8, marginBottom: 20,
+          background: "var(--bg-card)", padding: 4, borderRadius: 12,
         }}>
           {TABS.map((tab, i) => (
             <button
               key={tab}
               onClick={() => setActiveTab(i)}
               style={{
-                flex: 1,
-                padding: "10px 8px",
-                borderRadius: 10,
+                flex: 1, padding: "10px 8px", borderRadius: 10,
                 border: "none",
                 background: activeTab === i ? "var(--accent-primary)" : "transparent",
                 color: activeTab === i ? "white" : "var(--text-secondary)",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
+                fontSize: 13, fontWeight: 600, cursor: "pointer",
                 transition: "all 0.2s",
               }}
             >
@@ -262,9 +186,40 @@ export default function LeaderboardPage() {
         </div>
 
         {/* Content */}
-        {activeTab === 0 && renderPredictors()}
-        {activeTab === 1 && renderPlayers()}
-        {activeTab === 2 && renderCreators()}
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)" }}>
+            Loading rankings...
+          </div>
+        ) : data.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)" }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>🏆</div>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              No rankings yet
+            </div>
+            <div style={{ fontSize: 13 }}>
+              Be the first to make it on the leaderboard!
+            </div>
+          </div>
+        ) : (
+          data.map((entry, index) => renderEntry(entry, index + 1))
+        )}
+
+        {/* Your rank if not in top list */}
+        {!loading && data.length > 0 && user &&
+          !data.find(d => d.id === user.id) && (
+          <div style={{
+            marginTop: 16,
+            padding: 12,
+            borderRadius: 12,
+            background: "#6c63ff11",
+            border: "1px solid #6c63ff44",
+            textAlign: "center",
+            fontSize: 13,
+            color: "var(--text-secondary)",
+          }}>
+            Keep playing to climb the rankings! 🚀
+          </div>
+        )}
 
       </div>
     </div>
