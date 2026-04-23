@@ -55,11 +55,12 @@ export default function GameplayPage() {
 
     if (current + 1 >= total) {
       const params = new URLSearchParams({
-        correct: String(newResults.filter(Boolean).length),
-        total: String(total),
-        time: String(newTimings.reduce((a, b) => a + b, 0)),
-      });
-      router.push(`/challenges/${challengeId}/result?${params.toString()}`);
+  correct: String(newResults.filter(Boolean).length),
+  total: String(total),
+  time: String(newTimings.reduce((a, b) => a + b, 0)),
+  challengeId: challengeId,
+});
+router.push(`/challenges/${challengeId}/result?${params.toString()}`);
     } else {
       setResults(newResults);
       setTimings(newTimings);
