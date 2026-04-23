@@ -38,8 +38,8 @@ const NEXT_TIER: Record<string, string> = {
 function getStreakMultiplier(streakDays: number): string {
   if (streakDays >= 30) return "2.0×";
   if (streakDays >= 14) return "1.8×";
-  if (streakDays >= 7)  return "1.5×";
-  if (streakDays >= 3)  return "1.2×";
+  if (streakDays >= 7) return "1.5×";
+  if (streakDays >= 3) return "1.2×";
   return "1.0×";
 }
 
@@ -79,20 +79,13 @@ export default function ProfilePage() {
       <div style={{ padding: 16 }}>
 
         {/* Avatar + Name */}
-        <div style={{
-          textAlign: "center",
-          padding: "24px 0 20px",
-        }}>
+        <div style={{ textAlign: "center", padding: "24px 0 20px" }}>
           <div style={{
-            width: 80,
-            height: 80,
-            borderRadius: "50%",
+            width: 80, height: 80, borderRadius: "50%",
             background: tierColor + "22",
             border: `3px solid ${tierColor}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 32,
+            display: "flex", alignItems: "center",
+            justifyContent: "center", fontSize: 32,
             margin: "0 auto 12px",
           }}>
             🧠
@@ -101,31 +94,27 @@ export default function ProfilePage() {
             {user.username}
           </div>
           <span style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: "6px 16px",
-            borderRadius: 20,
-            fontSize: 13,
-            fontWeight: 600,
-            background: tierColor + "22",
-            color: tierColor,
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "6px 16px", borderRadius: 20,
+            fontSize: 13, fontWeight: 600,
+            background: tierColor + "22", color: tierColor,
           }}>
             ⭐ {TIER_LABELS[user.tier]}
-          {/* Share Profile */}
-          <div style={{ marginTop: 8 }}>
-  <Link href={`/profile/${user.username}`}>
-    <button style={{
-      padding: "6px 16px", borderRadius: 20,
-      border: "1px solid var(--border)",
-      background: "transparent",
-      color: "var(--text-secondary)",
-      fontSize: 12, cursor: "pointer",
-    }}>
-      🔗 View Public Profile
-    </button>
-  </Link>
-</div>
+          </span>
+          <div style={{ marginTop: 10 }}>
+            <Link href={`/profile/${user.username}`}>
+              <button style={{
+                padding: "6px 16px", borderRadius: 20,
+                border: "1px solid var(--border)",
+                background: "transparent",
+                color: "var(--text-secondary)",
+                fontSize: 12, cursor: "pointer",
+              }}>
+                🔗 View Public Profile
+              </button>
+            </Link>
+          </div>
+        </div>
 
         {/* Balance Card */}
         <div className="card" style={{
@@ -191,16 +180,11 @@ export default function ProfilePage() {
             { label: "Total Predictions", value: user.totalPredictions },
             { label: "Correct Predictions", value: user.correctPredictions },
             { label: "Accuracy Rate", value: `${accuracy}%` },
-            {
-              label: "Wrong Predictions",
-              value: user.totalPredictions - user.correctPredictions,
-            },
+            { label: "Wrong Predictions", value: user.totalPredictions - user.correctPredictions },
           ].map((row) => (
             <div key={row.label} style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "10px 0",
-              borderBottom: "1px solid var(--border)",
+              display: "flex", justifyContent: "space-between",
+              padding: "10px 0", borderBottom: "1px solid var(--border)",
               fontSize: 14,
             }}>
               <span style={{ color: "var(--text-secondary)" }}>{row.label}</span>
@@ -215,13 +199,7 @@ export default function ProfilePage() {
             TIER PROGRESS
           </div>
 
-          {/* Current tier */}
-          <div style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 12,
-          }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: tierColor }}>
                 {TIER_LABELS[user.tier]}
@@ -231,70 +209,55 @@ export default function ProfilePage() {
               </div>
             </div>
             <div style={{
-              padding: "6px 14px",
-              borderRadius: 20,
-              background: tierColor + "22",
-              color: tierColor,
-              fontSize: 12,
-              fontWeight: 600,
+              padding: "6px 14px", borderRadius: 20,
+              background: tierColor + "22", color: tierColor,
+              fontSize: 12, fontWeight: 600,
             }}>
               Current
             </div>
           </div>
 
-          {/* All tiers */}
           {["NEWCOMER", "MEMBER", "TRUSTED", "EXPERT", "ELITE"].map((tier) => {
-            const reached = ["NEWCOMER", "MEMBER", "TRUSTED", "EXPERT", "ELITE"]
-              .indexOf(tier) <=
-              ["NEWCOMER", "MEMBER", "TRUSTED", "EXPERT", "ELITE"]
-              .indexOf(user.tier);
+            const tiers = ["NEWCOMER", "MEMBER", "TRUSTED", "EXPERT", "ELITE"];
+            const reached = tiers.indexOf(tier) <= tiers.indexOf(user.tier);
             const isCurrent = tier === user.tier;
             const color = TIER_COLORS[tier];
 
             return (
               <div key={tier} style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 0",
-                borderBottom: "1px solid var(--border)",
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "8px 0", borderBottom: "1px solid var(--border)",
                 opacity: reached ? 1 : 0.4,
               }}>
                 <div style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
+                  width: 10, height: 10, borderRadius: "50%",
                   background: reached ? color : "var(--border)",
                   flexShrink: 0,
                 }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: isCurrent ? 700 : 400, color: isCurrent ? color : "var(--text-primary)" }}>
+                  <div style={{
+                    fontSize: 13,
+                    fontWeight: isCurrent ? 700 : 400,
+                    color: isCurrent ? color : "var(--text-primary)",
+                  }}>
                     {TIER_LABELS[tier]}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                     {TIER_REQUIREMENTS[tier]}
                   </div>
                 </div>
-                {reached && !isCurrent && (
-                  <span style={{ fontSize: 14 }}>✅</span>
-                )}
-                {isCurrent && (
-                  <span style={{ fontSize: 11, color, fontWeight: 600 }}>YOU</span>
-                )}
+                {reached && !isCurrent && <span style={{ fontSize: 14 }}>✅</span>}
+                {isCurrent && <span style={{ fontSize: 11, color, fontWeight: 600 }}>YOU</span>}
               </div>
             );
           })}
 
           {nextTier !== user.tier && (
             <div style={{
-              marginTop: 12,
-              padding: 10,
-              borderRadius: 10,
+              marginTop: 12, padding: 10, borderRadius: 10,
               background: TIER_COLORS[nextTier] + "11",
               border: `1px solid ${TIER_COLORS[nextTier]}33`,
-              fontSize: 12,
-              color: "var(--text-secondary)",
-              textAlign: "center",
+              fontSize: 12, color: "var(--text-secondary)", textAlign: "center",
             }}>
               Next: {TIER_LABELS[nextTier]} — {TIER_REQUIREMENTS[nextTier]}
             </div>
@@ -309,9 +272,7 @@ export default function ProfilePage() {
               cursor: "pointer", border: "1px solid #ffd70044",
             }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>💰</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-gold)" }}>
-                Wallet
-              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-gold)" }}>Wallet</div>
             </div>
           </Link>
           <Link href="/leaderboard">
@@ -320,9 +281,7 @@ export default function ProfilePage() {
               cursor: "pointer", border: "1px solid #6c63ff44",
             }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>🏆</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-primary)" }}>
-                Leaderboard
-              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-primary)" }}>Leaderboard</div>
             </div>
           </Link>
         </div>
