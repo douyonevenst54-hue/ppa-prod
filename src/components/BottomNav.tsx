@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { href: "/challenges", icon: "🎯", label: "Play" },
   { href: "/predictions", icon: "🧠", label: "Predict" },
   { href: "/polls", icon: "🗳️", label: "Polls" },
-  { href: "/wallet", icon: "💰", label: "Wallet" },
+  { href: "/profile", icon: "👤", label: "Profile" },
 ];
 
 export default function BottomNav() {
