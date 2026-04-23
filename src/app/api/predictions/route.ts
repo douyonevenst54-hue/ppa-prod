@@ -1,19 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get("search") || "";
+    const category = searchParams.get("category") || "ALL";
+    const sort = searchParams.get("sort") || "newest";
+
     const predictions = await prisma.content.findMany({
       where: {
         type: "prediction",
         status: "ACTIVE",
         endsAt: { gt: new Date() },
+        ...(category !== "ALL" && { category: category as never }),
+        ...(search && {
+          title: { contains: search, mode: "insensitive" as never },
+        }),
       },
       include: {
         creator: { select: { username: true } },
         _count: { select: { predictions: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy:
+        sort === "popular"
+          ? { participantCount: "desc" }
+          : sort === "ending"
+          ? { endsAt: "asc" }
+          : { createdAt: "desc" },
     });
 
     return NextResponse.json({ predictions });

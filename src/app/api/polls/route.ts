@@ -1,20 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get("search") || "";
+    const category = searchParams.get("category") || "ALL";
+    const sort = searchParams.get("sort") || "popular";
+
     const polls = await prisma.content.findMany({
       where: {
         type: "poll",
         status: "ACTIVE",
         endsAt: { gt: new Date() },
+        ...(category !== "ALL" && { category: category as never }),
+        ...(search && {
+          title: { contains: search, mode: "insensitive" as never },
+        }),
       },
       include: {
         pollOptions: true,
         creator: { select: { username: true } },
         _count: { select: { pollOptions: true } },
       },
-      orderBy: { participantCount: "desc" },
+      orderBy:
+        sort === "newest"
+          ? { createdAt: "desc" }
+          : sort === "ending"
+          ? { endsAt: "asc" }
+          : { participantCount: "desc" },
     });
 
     return NextResponse.json({ polls });
