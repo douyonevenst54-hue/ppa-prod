@@ -1,3 +1,5 @@
+export * from "./mandate";
+
 export type UserTier = "NEWCOMER" | "MEMBER" | "TRUSTED" | "EXPERT" | "ELITE";
 
 export type Category =

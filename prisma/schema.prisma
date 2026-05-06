@@ -200,3 +200,4 @@ enum AppStatus {
   INACTIVE
   SUSPENDED
 }
+
