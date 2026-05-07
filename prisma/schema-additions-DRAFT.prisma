@@ -1,0 +1,175 @@
+// =============================================================================
+// PPA Ecosystem — Mandate + Ledger additions
+//
+// Add these blocks to ~/ppa-prod/prisma/schema.prisma. They reference your
+// existing PPAApp and User models. The PPATransaction model is MODIFIED, not
+// added — replace your existing PPATransaction block with the version below.
+// =============================================================================
+
+
+// ----------------------------------------------------------------------------
+// MODIFIED: PPATransaction now serves as the hash-chained balance ledger.
+// Existing rows continue to exist with NULL hashes; new rows chain forward
+// from a per-user snapshot row.
+// ----------------------------------------------------------------------------
+
+model PPATransaction {
+  id              String   @id @default(cuid())
+  userId          String
+  amount          Int                                    // delta: positive=credit, negative=debit
+  type            String                                 // earn | spend | exchange | snapshot | mandate
+  source          String                                 // poll | prediction | challenge | streak | pi_payment | mandate:<mandateId> | snapshot
+  createdAt       DateTime @default(now())
+
+  // ---- new fields for ledger semantics ----
+  balanceAfter    Int?                                   // user's balance immediately after this row was applied
+  prevHash        String?                                // sha256 hex of previous row for this user; "0"*64 for first
+  rowHash         String?  @unique                       // sha256(prevHash || canonical(payload) || createdAt)
+  idempotencyKey  String?  @unique                       // optional, for retry safety
+  isSnapshot      Boolean  @default(false)               // true for the per-user genesis snapshot row
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([userId, isSnapshot])
+}
+
+
+// ----------------------------------------------------------------------------
+// MODIFIED: PPAApp gains apiKeyHash for safer storage. Old apiKey field stays
+// during transition; a follow-up migration drops it once all callers verify
+// against the hash.
+// ----------------------------------------------------------------------------
+
+// In your existing PPAApp model, add this field. Do NOT remove `apiKey` yet:
+//
+//   apiKeyHash  String?  @unique
+//
+// (Marked optional initially so the migration can be applied without
+// requiring a backfill. The backfill step is below.)
+
+
+// ----------------------------------------------------------------------------
+// NEW: User signing keys. Public key only — private key never leaves device.
+// ----------------------------------------------------------------------------
+
+model UserSigningKey {
+  id          String    @id @default(cuid())
+  piUserId    String                                     // matches User.piUserId
+  publicKey   String                                     // 32-byte ed25519 public key, base64
+  label       String?                                    // optional UX label like "Phone", "Backup"
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  mandates    AgentMandate[]
+
+  @@index([piUserId])
+  @@index([piUserId, revokedAt])
+}
+
+
+// ----------------------------------------------------------------------------
+// NEW: Agent mandates. Signed, scoped permission for an agent to spend on
+// behalf of a user, capped and time-bound.
+// ----------------------------------------------------------------------------
+
+enum MandateStatus {
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+  REVOKED
+}
+
+model AgentMandate {
+  id            String         @id @default(cuid())
+  piUserId      String                                   // matches User.piUserId
+  agentId       String                                   // identifier of the AI agent
+  appId         String                                   // PPAApp.id this mandate covers
+  scope         Json                                     // see ScopeShape in @/types/mandate
+  cap           Int                                      // total PPA spendable across mandate lifetime
+  spent         Int            @default(0)
+  perTxCap      Int?                                     // optional per-transaction cap
+  rateLimit     Json?                                    // { windowSeconds, maxTx } or null
+  notBefore     DateTime
+  expiresAt     DateTime
+  status        MandateStatus  @default(ACTIVE)
+  signature     String                                   // base64 ed25519 sig over canonical JSON
+  signingKeyId  String                                   // FK -> UserSigningKey.id
+  nonceSalt     String                                   // 32-byte hex, makes mandates unique
+  issuedAt      DateTime       @default(now())
+  revokedAt     DateTime?
+  revokedReason String?
+
+  signingKey  UserSigningKey @relation(fields: [signingKeyId], references: [id])
+  app         PPAApp         @relation(fields: [appId], references: [id])
+  nonces      MandateNonce[]
+  audits      AgentAudit[]
+
+  @@index([piUserId, status])
+  @@index([appId, status])
+  @@index([expiresAt])
+}
+
+
+// ----------------------------------------------------------------------------
+// NEW: Mandate nonces. Issued per-payment, consumed once. Bound to the
+// specific action (app, action type, amount, target) so they can't be
+// replayed against a different action.
+// ----------------------------------------------------------------------------
+
+model MandateNonce {
+  id           String    @id @default(cuid())
+  mandateId    String
+  nonce        String    @unique                         // 32-byte hex
+  actionHash   String                                    // sha256 of {appId, action, amount, targetId}
+  amount       Int
+  consumed     Boolean   @default(false)
+  consumedAt   DateTime?
+  piPaymentId  String?                                   // Pi payment ID once settled
+  issuedAt     DateTime  @default(now())
+  expiresAt    DateTime                                  // short — 60s default
+
+  mandate AgentMandate @relation(fields: [mandateId], references: [id])
+
+  @@index([mandateId, consumed])
+  @@index([expiresAt])
+}
+
+
+// ----------------------------------------------------------------------------
+// NEW: Agent audit. Append-only, hash-chained per piUserId. Captures every
+// material event in an agent payment lifecycle. Never updated, never deleted.
+//
+// (This is a parallel chain to PPATransaction's ledger chain. The ledger
+// records balance movements; this records mandate decisions, including
+// rejected ones that never moved a balance.)
+// ----------------------------------------------------------------------------
+
+enum AgentAuditEvent {
+  MANDATE_ISSUED
+  MANDATE_REVOKED
+  NONCE_ISSUED
+  PAYMENT_VERIFIED
+  PAYMENT_SETTLED
+  PAYMENT_REJECTED
+  CAP_HIT
+  RATE_LIMIT_HIT
+}
+
+model AgentAudit {
+  id        String           @id @default(cuid())
+  mandateId String?
+  piUserId  String                                       // matches User.piUserId
+  agentId   String
+  appId     String
+  eventType AgentAuditEvent
+  payload   Json                                         // verb-specific data
+  prevHash  String                                       // sha256 of previous row for this piUserId
+  rowHash   String           @unique                     // sha256(prevHash || canonical(payload) || createdAt)
+  createdAt DateTime         @default(now())
+
+  mandate AgentMandate? @relation(fields: [mandateId], references: [id])
+
+  @@index([piUserId, createdAt])
+  @@index([mandateId])
+}
