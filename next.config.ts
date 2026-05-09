@@ -6,10 +6,12 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          { key: "X-Frame-Options", value: "ALLOWALL" },
+          // Allow framing from Pi Browser only — Pi domains and self.
+          // X-Frame-Options is legacy and only supports a single origin,
+          // so we rely on CSP frame-ancestors which supports a list.
           {
             key: "Content-Security-Policy",
-            value: "frame-ancestors *;",
+            value: "frame-ancestors 'self' https://*.minepi.com https://*.pi.app https://sandbox.minepi.com;",
           },
         ],
       },

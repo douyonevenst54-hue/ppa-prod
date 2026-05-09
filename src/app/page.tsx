@@ -61,6 +61,25 @@ async function getFeaturedChallenge() {
   }
 }
 
+interface LeaderboardEntry {
+  username: string;
+  accuracyRate: number;
+  tier: string;
+}
+
+async function getTopLeaderboard(): Promise<LeaderboardEntry[]> {
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/leaderboard?type=predictors`,
+      { cache: "no-store" }
+    );
+    const data = await res.json();
+    return (data.users || []).slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
 const mockLeaderboard = [
   { rank: 1, username: "Alex_Pi", accuracyRate: 87, tier: "ELITE" },
   { rank: 2, username: "Maria_K", accuracyRate: 82, tier: "EXPERT" },
@@ -70,8 +89,19 @@ const mockLeaderboard = [
 export default async function HomePage() {
   const prediction = await getFeaturedPrediction();
   const challenge = await getFeaturedChallenge();
+  const topUsers = await getTopLeaderboard();
   const questionCount = challenge?.questions?.length || 5;
   const difficulty = challenge?.questions?.[0]?.difficulty || "MEDIUM";
+
+  // Use real leaderboard if available, otherwise fall back to mock for first-launch state
+  const leaderboardData = topUsers.length > 0
+    ? topUsers.map((u, i) => ({
+        rank: i + 1,
+        username: u.username,
+        accuracyRate: Math.round(u.accuracyRate * 100),
+        tier: u.tier,
+      }))
+    : mockLeaderboard;
 
   return (
     <div style={{ padding: "0 0 80px 0", minHeight: "100vh" }}>
@@ -149,7 +179,7 @@ export default async function HomePage() {
           LEADERBOARD
         </div>
         <div className="card" style={{ marginBottom: 12 }}>
-          {mockLeaderboard.map((entry) => (
+          {leaderboardData.map((entry) => (
             <div key={entry.rank} style={{
               display: "flex",
               justifyContent: "space-between",

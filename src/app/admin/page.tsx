@@ -58,6 +58,10 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 const CATEGORIES = ["GENERAL", "FINANCE", "SPORTS", "TECH", "POLITICS", "SOCIAL"];
 
+// Mirror of server-side ADMIN_PI_USERIDS (in api/admin/* routes).
+// Keep in sync with both. Server is source of truth — this is just a UX gate.
+const ADMIN_PI_USERIDS = ["douyonevenst54"];
+
 function timeLeft(endsAt: string): string {
   const diff = new Date(endsAt).getTime() - Date.now();
   if (diff <= 0) return "⏰ Ended";
@@ -68,7 +72,7 @@ function timeLeft(endsAt: string): string {
 }
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<"predictions" | "questions">("predictions");
 
   // Predictions state
@@ -169,6 +173,29 @@ export default function AdminPage() {
       setQuestions(prev => prev.filter(q => q.id !== questionId));
     } catch { setError("Failed to delete"); }
   };
+
+  // Proactive admin gate: while auth is loading, show a spinner; once loaded,
+  // immediately block non-admins (server still re-checks every API call).
+  if (authLoading) {
+    return (
+      <div style={{ padding: 16, textAlign: "center", paddingTop: 80 }}>
+        <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user || !ADMIN_PI_USERIDS.includes(user.username)) {
+    return (
+      <div style={{ padding: 16, textAlign: "center", paddingTop: 80 }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Access Denied</div>
+        <div style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16 }}>
+          This area is restricted to administrators.
+        </div>
+        <Link href="/" style={{ color: "var(--accent-primary)" }}>← Back to Home</Link>
+      </div>
+    );
+  }
 
   if (error === "Unauthorized") {
     return (
