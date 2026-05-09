@@ -9,7 +9,7 @@ privacy_policy = "https://ppa-prod.vercel.app/privacy"
 terms_of_service = "https://ppa-prod.vercel.app/terms"
 
 [permissions]
-payments = false
+payments = true
 username = true
 
 [developer]
