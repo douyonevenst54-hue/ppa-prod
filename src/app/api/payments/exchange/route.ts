@@ -3,10 +3,9 @@ import { prisma } from "@/lib/prisma";
 
 // Exchange rates
 const PI_TO_PPA = 1000;      // 1π = 1000 PPA (buying)
-const PPA_TO_PI = 0.0008;    // 1000 PPA = 0.8π (selling — 20% spread)
-const BURN_RATE = 0.03;      // 3% burned on redemption
-const MIN_REDEEM = 5000;     // Minimum PPA to redeem
-const MIN_ACCURACY = 0.65;   // 65% accuracy required
+// Redemption constants (PPA_TO_PI, BURN_RATE, MIN_REDEEM, MIN_ACCURACY) are
+// disabled along with the redeem path. They will be reintroduced when A2U
+// payouts ship.
 
 export async function POST(req: NextRequest) {
   try {
@@ -66,50 +65,14 @@ export async function POST(req: NextRequest) {
     }
 
     // ── REDEEM: PPA → $Pi ───────────────────────────
+    // TEMPORARILY DISABLED: A2U (App-to-User) Pi payments are under
+    // development. The previous implementation burned PPA without sending
+    // Pi. Redemption is disabled at the API layer until A2U ships.
     if (direction === "redeem") {
-      // Eligibility checks
-      if (user.ppaBalance < MIN_REDEEM) {
-        return NextResponse.json({
-          error: `Minimum ${MIN_REDEEM} PPA required to redeem`,
-        }, { status: 400 });
-      }
-
-      if (user.accuracyRate < MIN_ACCURACY) {
-        return NextResponse.json({
-          error: `Minimum ${MIN_ACCURACY * 100}% accuracy required to redeem`,
-        }, { status: 400 });
-      }
-
-      const burnAmount = Math.floor(amount * BURN_RATE);
-      const netAmount = amount - burnAmount;
-      const piAmount = parseFloat((netAmount * PPA_TO_PI).toFixed(6));
-
-      // Deduct PPA + burn
-      await prisma.user.update({
-        where: { id: userId },
-        data: { ppaBalance: { decrement: amount } },
-      });
-
-      await prisma.pPATransaction.create({
-        data: {
-          userId,
-          amount: -amount,
-          type: "burn",
-          source: `pi_exchange_redeem_${piAmount}pi`,
-        },
-      });
-
-      // NOTE: Actual $Pi payout requires server-side Pi wallet
-      // This logs the redemption request for manual/automated processing
       return NextResponse.json({
-        success: true,
-        direction: "redeem",
-        ppaSpent: amount,
-        ppaBurned: burnAmount,
-        piToReceive: piAmount,
-        status: "pending",
-        message: "Redemption queued. Pi will be sent within 24 hours.",
-      });
+        error: "Redemption is temporarily disabled while we build proper Pi payouts. Coming soon!",
+        code: "REDEEM_DISABLED",
+      }, { status: 503 });
     }
 
     return NextResponse.json({ error: "Invalid direction" }, { status: 400 });

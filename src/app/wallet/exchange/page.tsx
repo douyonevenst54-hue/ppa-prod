@@ -5,21 +5,18 @@ import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 
 const PI_TO_PPA = 1000;
-const MIN_REDEEM = 5000;
-const MIN_ACCURACY = 65;
 
 export default function ExchangePage() {
   const { user, refreshUser } = useAuth();
+  // Redeem is temporarily disabled while A2U (App-to-User) Pi payouts are
+  // built out properly. Tab is kept in state for forward compatibility but
+  // only "buy" is currently exposed in the UI.
   const [tab, setTab] = useState<"buy" | "redeem">("buy");
   const [piAmount, setPiAmount] = useState(1);
-  const [ppaAmount, setPpaAmount] = useState(5000);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
   const ppaFromPi = piAmount * PI_TO_PPA;
-  const piFromPpa = ((ppaAmount * 0.97) * 0.0008).toFixed(4);
-  const accuracyOk = (user?.accuracyRate || 0) * 100 >= MIN_ACCURACY;
-  const balanceOk = (user?.ppaBalance || 0) >= ppaAmount;
 
   const handleBuy = async () => {
     if (!user) return;
@@ -117,36 +114,8 @@ export default function ExchangePage() {
     }
   };
 
-  const handleRedeem = async () => {
-    if (!user) return;
-    setLoading(true);
-    setStatus("⏳ Processing redemption...");
-
-    try {
-      const res = await fetch("/api/payments/exchange", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          direction: "redeem",
-          amount: ppaAmount,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        await refreshUser();
-        setStatus(`✅ Redemption queued! ${piFromPpa}π will arrive within 24h.`);
-      } else {
-        setStatus(`❌ ${data.error}`);
-      }
-    } catch {
-      setStatus("❌ Redemption failed. Try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // handleRedeem removed: redeem is temporarily disabled. See the
+  // /api/payments/exchange route — server returns 503 for direction:"redeem".
 
   return (
     <div style={{ padding: "0 0 80px 0" }}>
@@ -182,22 +151,44 @@ export default function ExchangePage() {
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs (Redeem temporarily disabled — A2U payout under construction) */}
         <div style={{
           display: "flex", gap: 8, marginBottom: 16,
           background: "var(--bg-card)", padding: 4, borderRadius: 12,
         }}>
-          {(["buy", "redeem"] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              flex: 1, padding: "10px 8px", borderRadius: 10,
-              border: "none",
-              background: tab === t ? "var(--accent-primary)" : "transparent",
-              color: tab === t ? "white" : "var(--text-secondary)",
-              fontSize: 14, fontWeight: 600, cursor: "pointer",
-            }}>
-              {t === "buy" ? "Buy PPA" : "Redeem PPA"}
-            </button>
-          ))}
+          <button onClick={() => setTab("buy")} style={{
+            flex: 1, padding: "10px 8px", borderRadius: 10,
+            border: "none",
+            background: tab === "buy" ? "var(--accent-primary)" : "transparent",
+            color: tab === "buy" ? "white" : "var(--text-secondary)",
+            fontSize: 14, fontWeight: 600, cursor: "pointer",
+          }}>
+            Buy PPA
+          </button>
+          <button disabled aria-label="Redeem PPA — coming soon" style={{
+            flex: 1, padding: "10px 8px", borderRadius: 10,
+            border: "none", background: "transparent",
+            color: "var(--text-secondary)",
+            fontSize: 14, fontWeight: 600, cursor: "not-allowed",
+            opacity: 0.45,
+          }}>
+            Redeem · Soon
+          </button>
+        </div>
+
+        {/* Heads-up about redemption status */}
+        <div className="card" style={{
+          marginBottom: 16,
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          fontSize: 13,
+          color: "var(--text-secondary)",
+          lineHeight: 1.4,
+        }}>
+          <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>
+            🔧 Redemption coming soon
+          </div>
+          PPA → $Pi redemption is under construction. We&apos;re building a proper App-to-User Pi payout flow so redeemed PPA actually arrives in your Pi wallet. Buy PPA is fully working in the meantime.
         </div>
 
         {/* Buy Tab */}
@@ -250,69 +241,10 @@ export default function ExchangePage() {
           </>
         )}
 
-        {/* Redeem Tab */}
-        {tab === "redeem" && (
-          <>
-            {!accuracyOk && (
-              <div className="card" style={{
-                marginBottom: 16, background: "#ff658411",
-                border: "1px solid #ff658444",
-              }}>
-                <div style={{ fontSize: 13, color: "#ff6584" }}>
-                  ⚠️ You need {MIN_ACCURACY}% accuracy to redeem.
-                  Current: {Math.round((user?.accuracyRate || 0) * 100)}%
-                </div>
-              </div>
-            )}
-
-            <div className="card" style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
-                REDEEM AMOUNT (PPA)
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                {[5000, 10000, 25000, 50000].map((amt) => (
-                  <button key={amt} onClick={() => setPpaAmount(amt)} style={{
-                    flex: 1, padding: "10px 4px", borderRadius: 10,
-                    border: `1px solid ${ppaAmount === amt ? "var(--accent-gold)" : "var(--border)"}`,
-                    background: ppaAmount === amt ? "#ffd70022" : "var(--bg-secondary)",
-                    color: ppaAmount === amt ? "var(--accent-gold)" : "var(--text-secondary)",
-                    fontSize: 11, cursor: "pointer",
-                  }}>
-                    {(amt / 1000)}K
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="card" style={{
-              marginBottom: 16, textAlign: "center",
-              background: "linear-gradient(135deg, #1a1a2e, #16213e)",
-              border: "1px solid #ffd70044",
-            }}>
-              <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>
-                YOU RECEIVE
-              </div>
-              <div style={{ fontSize: 36, fontWeight: 800, color: "#6c63ff" }}>
-                {piFromPpa}π
-              </div>
-              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8 }}>
-                3% burn fee applied • Arrives within 24h
-              </div>
-            </div>
-
-            <button
-              className="btn-primary"
-              onClick={handleRedeem}
-              disabled={loading || !accuracyOk || !balanceOk}
-              style={{
-                opacity: loading || !accuracyOk || !balanceOk ? 0.4 : 1,
-                cursor: loading || !accuracyOk || !balanceOk ? "not-allowed" : "pointer",
-              }}
-            >
-              {loading ? "Processing..." : `Redeem ${ppaAmount.toLocaleString()} PPA → ${piFromPpa}π`}
-            </button>
-          </>
-        )}
+        {/* Redeem Tab — intentionally removed; the Redeem tab button is
+            disabled in the Tabs section above and a heads-up panel is shown
+            in its place. The redeem flow will be reintroduced when A2U
+            payouts ship. */}
 
         {/* Status */}
         {status && (
