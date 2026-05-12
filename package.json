@@ -24,6 +24,7 @@
     "pusher-js": "^8.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "@stellar/stellar-sdk": "^12.3.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.12"
   },
