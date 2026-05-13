@@ -154,10 +154,72 @@ export function usePiAuth() {
   }
 
   function signOut() {
-    localStorage.removeItem("ppa_user");
+    // Clear ALL traces of our session. Pi-side grant is unaffected, but at
+    // least the user can re-trigger the auth flow from a clean slate.
+    try {
+      localStorage.removeItem("ppa_user");
+      // Belt + suspenders: clear anything Pi-related the SDK may have left.
+      Object.keys(localStorage).forEach((k) => {
+        if (k.toLowerCase().includes("pi_") || k.toLowerCase().includes("ppa_")) {
+          localStorage.removeItem(k);
+        }
+      });
+      sessionStorage.clear();
+    } catch {
+      // localStorage can throw in some private-browsing modes — non-fatal
+    }
     setUser(null);
     setStatus("requires_pi_browser");
   }
 
-  return { user, status, loading, signOut, updateUser };
+  /**
+   * Aggressively force a fresh Pi consent screen. Used when we need the user
+   * to grant a new scope (e.g. wallet_address for A2U) but Pi has cached the
+   * old grant. Calling Pi.authenticate directly with the new scope set
+   * usually triggers a re-prompt; if not, the user must revoke on Pi's side.
+   */
+  async function forceReauth() {
+    // 1. Tear down our cached session
+    signOut();
+
+    // 2. Try to call authenticate with the new scopes — Pi may show consent
+    if (typeof window === "undefined" || !window.Pi) {
+      // Page reload will re-init and trigger Pi.authenticate fresh
+      window.location.reload();
+      return;
+    }
+
+    try {
+      window.Pi.init({
+        version: "2.0",
+        sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
+      });
+      await new Promise((r) => setTimeout(r, 300));
+
+      const auth = await window.Pi.authenticate(
+        ["username", "payments", "wallet_address"],
+        async (payment) => {
+          try {
+            await fetch("/api/payments/approve", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                paymentId: (payment as { identifier: string }).identifier,
+              }),
+            });
+          } catch (e) {
+            console.error("Incomplete payment handling failed:", e);
+          }
+        },
+      );
+      await signInWithPi(auth.user.uid, auth.user.username);
+      setStatus("authenticated");
+    } catch (err) {
+      console.error("Force reauth failed:", err);
+      // Fall back to a full page reload, which kicks off initPiAuth() again
+      window.location.reload();
+    }
+  }
+
+  return { user, status, loading, signOut, forceReauth, updateUser };
 }

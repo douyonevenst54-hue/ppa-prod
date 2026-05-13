@@ -11,7 +11,7 @@ const MIN_REDEEM = 5000;
 const MIN_ACCURACY = 65;  // percentage
 
 export default function ExchangePage() {
-  const { user, refreshUser, signOut } = useAuth();
+  const { user, refreshUser, signOut, forceReauth } = useAuth();
   const [tab, setTab] = useState<"buy" | "redeem">("buy");
   const [piAmount, setPiAmount] = useState(1);
   const [ppaAmount, setPpaAmount] = useState(MIN_REDEEM);
@@ -374,6 +374,27 @@ export default function ExchangePage() {
             }}
           >
             {status}
+          </div>
+        )}
+
+        {/* Re-authorize prompt — shown when redeem fails (likely scope issue) */}
+        {status.startsWith("❌") && tab === "redeem" && (
+          <div className="card" style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 10, lineHeight: 1.5 }}>
+              💡 If this keeps failing, Pi may need a new permission to send tokens
+              back to your wallet. Try re-authorizing:
+            </div>
+            <button
+              onClick={() => { void forceReauth(); }}
+              style={{
+                width: "100%", padding: "10px 16px",
+                borderRadius: 10, border: "1px solid var(--accent-primary)",
+                background: "transparent", color: "var(--accent-primary)",
+                fontSize: 13, cursor: "pointer", fontWeight: 600,
+              }}
+            >
+              🔐 Re-authorize with Pi
+            </button>
           </div>
         )}
 

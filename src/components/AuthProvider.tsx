@@ -8,6 +8,7 @@ interface AuthContextType {
   status: AuthStatus;
   loading: boolean;
   signOut: () => void;
+  forceReauth: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -16,6 +17,7 @@ const AuthContext = createContext<AuthContextType>({
   status: "loading",
   loading: true,
   signOut: () => {},
+  forceReauth: async () => {},
   refreshUser: async () => {},
 });
 

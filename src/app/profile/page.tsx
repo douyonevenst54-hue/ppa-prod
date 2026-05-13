@@ -44,7 +44,7 @@ function getStreakMultiplier(streakDays: number): string {
 }
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, forceReauth, signOut } = useAuth();
 
   if (!user) {
     return (
@@ -304,6 +304,49 @@ export default function ProfilePage() {
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-primary)" }}>Leaderboard</div>
             </div>
           </Link>
+        </div>
+
+        {/* Account section */}
+        <div style={{
+          marginTop: 24,
+          fontSize: 12, color: "var(--text-secondary)",
+          marginBottom: 8, fontWeight: 600, letterSpacing: 1,
+        }}>
+          ACCOUNT
+        </div>
+
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+            🔐 Re-authorize Pi access
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.5 }}>
+            Required once after adding the Wallet Address permission. Tap this to
+            grant Pi the new permission needed for redemption.
+          </div>
+          <button
+            className="btn-primary"
+            onClick={() => { void forceReauth(); }}
+            style={{ width: "100%", fontSize: 14 }}
+          >
+            Re-authorize with Pi
+          </button>
+        </div>
+
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+            👋 Sign out
+          </div>
+          <button
+            onClick={() => signOut()}
+            style={{
+              width: "100%", padding: "10px 16px",
+              borderRadius: 10, border: "1px solid var(--border)",
+              background: "transparent", color: "var(--text-secondary)",
+              fontSize: 13, cursor: "pointer",
+            }}
+          >
+            Sign out
+          </button>
         </div>
 
       </div>
