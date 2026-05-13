@@ -12,7 +12,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Upsert user — create if not exists, return if exists
+    // Migration path: legacy rows had username copied into piUserId.
+    // If we find a row with piUserId === current username but no row with
+    // the real piUserId yet, update the legacy row in place.
+    if (piUserId !== username) {
+      const legacy = await prisma.user.findUnique({ where: { piUserId: username } });
+      const real = await prisma.user.findUnique({ where: { piUserId } });
+      if (legacy && !real) {
+        const migrated = await prisma.user.update({
+          where: { id: legacy.id },
+          data: { piUserId, username, lastActiveDate: new Date() },
+        });
+        return NextResponse.json({ user: migrated });
+      }
+    }
+
+    // Standard upsert by piUserId — create if new, update if existing.
     const user = await prisma.user.upsert({
       where: { piUserId },
       update: {

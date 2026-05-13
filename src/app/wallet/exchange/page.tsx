@@ -11,7 +11,7 @@ const MIN_REDEEM = 5000;
 const MIN_ACCURACY = 65;  // percentage
 
 export default function ExchangePage() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, signOut } = useAuth();
   const [tab, setTab] = useState<"buy" | "redeem">("buy");
   const [piAmount, setPiAmount] = useState(1);
   const [ppaAmount, setPpaAmount] = useState(MIN_REDEEM);
@@ -139,6 +139,9 @@ export default function ExchangePage() {
       if (data.success) {
         await refreshUser();
         setStatus(`✅ ${data.piReceived}π sent to your Pi wallet! tx: ${String(data.txid).slice(0, 8)}…`);
+      } else if (data.code === "REAUTH_REQUIRED") {
+        setStatus("🔄 Signing you out so Pi can re-authorize wallet payouts. Please sign back in.");
+        setTimeout(() => signOut(), 1500);
       } else {
         setStatus(`❌ ${data.error || "Redemption failed"}`);
       }

@@ -170,6 +170,19 @@ async function handleRedeem(body: RedeemBody) {
   if (!user.piUserId) {
     return NextResponse.json({ error: "User missing Pi UID" }, { status: 400 });
   }
+  // Legacy rows had username stored in piUserId, which breaks A2U. Force
+  // those users to re-authenticate so we capture the real Pi uid + the
+  // wallet_address scope.
+  const looksLikeUuid = /^[a-f0-9-]{36}$/i.test(user.piUserId);
+  if (!looksLikeUuid) {
+    return NextResponse.json(
+      {
+        error: "Please sign out and sign back in to enable Pi payouts.",
+        code: "REAUTH_REQUIRED",
+      },
+      { status: 409 },
+    );
+  }
   if (amount < MIN_REDEEM) {
     return NextResponse.json(
       { error: `Minimum ${MIN_REDEEM} PPA required to redeem` },

@@ -59,16 +59,23 @@ export function usePiAuth() {
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
+        // Invalidate cache if piUserId doesn't look like a Pi UUID — old rows
+        // had username stored in piUserId, which breaks A2U. Force re-auth so
+        // the user is upserted with the real uid AND grants wallet_address.
+        const looksLikeUuid = /^[a-f0-9-]{36}$/i.test(parsed.piUserId || "");
         if (
           parsed.piUserId &&
           !parsed.piUserId.startsWith("demo_") &&
-          parsed.piUserId !== "demo_guest"
+          parsed.piUserId !== "demo_guest" &&
+          looksLikeUuid
         ) {
           setUser(parsed);
           setStatus("authenticated");
           setLoading(false);
           return;
         }
+        // Otherwise clear cache and fall through to re-auth
+        localStorage.removeItem("ppa_user");
       } catch {
         localStorage.removeItem("ppa_user");
       }
@@ -98,7 +105,7 @@ export function usePiAuth() {
       await new Promise(r => setTimeout(r, 500));
 
       const auth = await window.Pi.authenticate(
-        ["username", "payments"],
+        ["username", "payments", "wallet_address"],
         async (payment) => {
           console.log("Incomplete payment found:", payment);
           try {
