@@ -315,3 +315,99 @@ model AgentAudit {
   @@index([piUserId, createdAt])
   @@index([mandateId])
 }
+
+// Enums
+enum ContentSource {
+  MANUAL
+  AI_SONNET_46
+  AI_HAIKU_45
+  AI_OPUS_47
+  IMPORTED
+}
+
+enum DraftStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  PUBLISHED
+}
+
+// Question — add explanation, source, createdBy, indexes; switch options to String[]
+model Question {
+  id            String        @id @default(cuid())
+  contentId     String?
+  text          String
+  options       String[]                                    // CHANGED: Json → String[]
+  correctAnswer String
+  explanation   String?                                     // NEW
+  category      Category
+  difficulty    Difficulty
+  qualityScore  Int           @default(0)
+  timesServed   Int           @default(0)
+  timesCorrect  Int           @default(0)
+  source        ContentSource @default(MANUAL)              // NEW
+  createdBy     String?                                     // NEW
+  createdAt     DateTime      @default(now())
+
+  content Content?          @relation(fields: [contentId], references: [id])
+  results ChallengeResult[]
+
+  @@index([category, difficulty])                            // NEW
+  @@index([category, createdAt(sort: Desc)])                 // NEW
+}
+
+// New review queue
+model AIContentDraft {
+  id           String      @id @default(cuid())
+  type         String                                        // "qa" | "poll"
+  category     Category
+  difficulty   Difficulty?
+  payload      Json
+  status       DraftStatus @default(PENDING_REVIEW)
+  sourceApp    String                                        // "PPA" | "LOPIPO" | ...
+  sourceModel  String
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  publishedId  String?
+  rejectReason String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([status])
+  @@index([category, status])
+  @@index([sourceApp, status])
+}
+
+// New system-level AI generation log (separate from EcosystemTransaction)
+model AIGenerationLog {
+  id                 String      @id @default(cuid())
+  appId              String
+  app                PPAApp      @relation(fields: [appId], references: [id])
+  contentType        String
+  category           Category
+  difficulty         Difficulty?
+  topic              String?
+  model              String
+  requested          Int
+  returned           Int
+  duplicatesRejected Int         @default(0)
+  inputTokens        Int?
+  outputTokens       Int?
+  cacheReadTokens    Int?
+  cacheWriteTokens   Int?
+  latencyMs          Int?
+  status             String      @default("SUCCESS")
+  errorMessage       String?
+  createdAt          DateTime    @default(now())
+
+  @@index([appId, createdAt])
+  @@index([appId, status, createdAt])
+}
+
+// PPAApp — add the back-relation for the new log
+model PPAApp {
+  // ... all existing fields unchanged
+  aiGenerationLogs AIGenerationLog[]                         // NEW back-relation
+}
+
+// EcosystemTransaction — UNCHANGED. Stays user-level.

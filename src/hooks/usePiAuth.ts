@@ -47,7 +47,9 @@ declare global {
   }
 }
 
-export type AuthStatus = "loading" | "authenticated" | "requires_pi_browser";
+// "public" = browsing outside Pi Browser. App is fully accessible, but
+// actions requiring Pi SDK (login, payments) are gated at the action level.
+export type AuthStatus = "loading" | "authenticated" | "public";
 
 export function usePiAuth() {
   const [user, setUser] = useState<PPAUser | null>(null);
@@ -59,9 +61,6 @@ export function usePiAuth() {
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        // Invalidate cache if piUserId doesn't look like a Pi UUID — old rows
-        // had username stored in piUserId, which breaks A2U. Force re-auth so
-        // the user is upserted with the real uid AND grants wallet_address.
         const looksLikeUuid = /^[a-f0-9-]{36}$/i.test(parsed.piUserId || "");
         if (
           parsed.piUserId &&
@@ -74,7 +73,6 @@ export function usePiAuth() {
           setLoading(false);
           return;
         }
-        // Otherwise clear cache and fall through to re-auth
         localStorage.removeItem("ppa_user");
       } catch {
         localStorage.removeItem("ppa_user");
@@ -85,6 +83,21 @@ export function usePiAuth() {
 
   async function initPiAuth() {
     try {
+      // Detect Pi Browser via user agent. The SDK script loads in any
+      // browser, but only Pi Browser has the native bridge that makes
+      // pi.authenticate() actually resolve. Without this check, plain
+      // browsers hang on authenticate() for 2 minutes before timing out.
+      const isPiBrowser =
+        typeof navigator !== "undefined" &&
+        /PiBrowser/i.test(navigator.userAgent);
+
+      if (!isPiBrowser) {
+        setStatus("public");
+        setLoading(false);
+        return;
+      }
+
+      // Wait for SDK to inject (Pi Browser only)
       let attempts = 0;
       while (!window.Pi && attempts < 30) {
         await new Promise(r => setTimeout(r, 300));
@@ -92,7 +105,7 @@ export function usePiAuth() {
       }
 
       if (!window.Pi) {
-        setStatus("requires_pi_browser");
+        setStatus("public");
         setLoading(false);
         return;
       }
@@ -127,7 +140,7 @@ export function usePiAuth() {
 
     } catch (err) {
       console.error("Pi auth error:", err);
-      setStatus("requires_pi_browser");
+      setStatus("public");
     } finally {
       setLoading(false);
     }
@@ -154,11 +167,8 @@ export function usePiAuth() {
   }
 
   function signOut() {
-    // Clear ALL traces of our session. Pi-side grant is unaffected, but at
-    // least the user can re-trigger the auth flow from a clean slate.
     try {
       localStorage.removeItem("ppa_user");
-      // Belt + suspenders: clear anything Pi-related the SDK may have left.
       Object.keys(localStorage).forEach((k) => {
         if (k.toLowerCase().includes("pi_") || k.toLowerCase().includes("ppa_")) {
           localStorage.removeItem(k);
@@ -166,25 +176,16 @@ export function usePiAuth() {
       });
       sessionStorage.clear();
     } catch {
-      // localStorage can throw in some private-browsing modes — non-fatal
+      // non-fatal
     }
     setUser(null);
-    setStatus("requires_pi_browser");
+    setStatus("public");
   }
 
-  /**
-   * Aggressively force a fresh Pi consent screen. Used when we need the user
-   * to grant a new scope (e.g. wallet_address for A2U) but Pi has cached the
-   * old grant. Calling Pi.authenticate directly with the new scope set
-   * usually triggers a re-prompt; if not, the user must revoke on Pi's side.
-   */
   async function forceReauth() {
-    // 1. Tear down our cached session
     signOut();
 
-    // 2. Try to call authenticate with the new scopes — Pi may show consent
     if (typeof window === "undefined" || !window.Pi) {
-      // Page reload will re-init and trigger Pi.authenticate fresh
       window.location.reload();
       return;
     }
@@ -216,7 +217,6 @@ export function usePiAuth() {
       setStatus("authenticated");
     } catch (err) {
       console.error("Force reauth failed:", err);
-      // Fall back to a full page reload, which kicks off initPiAuth() again
       window.location.reload();
     }
   }
