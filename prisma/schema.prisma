@@ -1,67 +1,58 @@
+// prisma/schema.prisma
+//
+// Source of truth: the live ppa_production Neon database
+// (introspected via `prisma db pull` on 2026-05-22).
+//
+// Patches applied on top of the introspection:
+//   1. @default(cuid()) restored on every model's id (introspection strips
+//      these because Postgres just sees text columns).
+//   2. Auto-named relations (e.g. `Content Content`) renamed to lowercase
+//      conventions that match how application code accesses them
+//      (e.g. `content.predictions`, `user.results`).
+//   3. Nothing else changed. No new fields, no new tables, no schema
+//      changes that aren't already in the DB. Migrations untouched.
+//
+// If you need to add fields (explanation, source, createdBy, etc.) or
+// new tables (AIGenerationLog, AIContentDraft), do so via a proper
+// migration in a separate PR. Do not append duplicate model blocks.
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-enum UserTier {
-  NEWCOMER
-  MEMBER
-  TRUSTED
-  EXPERT
-  ELITE
-}
-
-enum ContentStatus {
-  PENDING
-  ACTIVE
-  RESOLVED
-  ARCHIVED
-}
-
-enum Difficulty {
-  EASY
-  MEDIUM
-  HARD
-}
-
-enum Category {
-  SPORTS
-  FINANCE
-  TECH
-  POLITICS
-  SOCIAL
-  GENERAL
-}
+// ---------------------------------------------------------------------------
+// Core user & content
+// ---------------------------------------------------------------------------
 
 model User {
-  id                 String    @id @default(cuid())
-  piUserId           String    @unique
-  username           String    @unique
-  ppaBalance         Int       @default(100)
-  accuracyRate       Float     @default(0)
-  reputationScore    Float     @default(0)
-  streakDays         Int       @default(0)
+  id                 String   @id @default(cuid())
+  piUserId           String   @unique
+  username           String   @unique
+  ppaBalance         Int      @default(100)
+  accuracyRate       Float    @default(0)
+  reputationScore    Float    @default(0)
+  streakDays         Int      @default(0)
   lastActiveDate     DateTime?
   lastStreakDate     DateTime?
-  longestStreak      Int       @default(0)
-  tier               UserTier  @default(NEWCOMER)
-  totalPredictions   Int       @default(0)
-  correctPredictions Int       @default(0)
-  totalChallenges    Int       @default(0)
-  correctChallenges  Int       @default(0)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  longestStreak      Int      @default(0)
+  tier               UserTier @default(NEWCOMER)
+  totalPredictions   Int      @default(0)
+  correctPredictions Int      @default(0)
+  totalChallenges    Int      @default(0)
+  correctChallenges  Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  predictions      Prediction[]
-  challengeResults ChallengeResult[]
-  pollVotes        PollVote[]
-  createdContent   Content[]
-  transactions     PPATransaction[]
+  results      ChallengeResult[]
+  createdContent      Content[]
+  transactions PPATransaction[]
+  pollVotes    PollVote[]
+  predictions  Prediction[]
 }
 
 model Content {
@@ -77,10 +68,41 @@ model Content {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  creator      User         @relation(fields: [creatorId], references: [id])
-  predictions  Prediction[]
-  pollOptions  PollOption[]
-  questions    Question[]
+  creator     User         @relation(fields: [creatorId], references: [id])
+  pollOptions PollOption[]
+  predictions Prediction[]
+  questions   Question[]
+}
+
+model Question {
+  id            String     @id @default(cuid())
+  contentId     String?
+  text          String
+  options       Json
+  correctAnswer String
+  category      Category
+  difficulty    Difficulty
+  qualityScore  Int        @default(0)
+  timesServed   Int        @default(0)
+  timesCorrect  Int        @default(0)
+  createdAt     DateTime   @default(now())
+
+  content Content?          @relation(fields: [contentId], references: [id])
+  results ChallengeResult[]
+}
+
+model ChallengeResult {
+  id          String   @id @default(cuid())
+  userId      String
+  questionId  String
+  isCorrect   Boolean
+  timeSeconds Int
+  ppaEarned   Int      @default(0)
+  streakBonus Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  question Question @relation(fields: [questionId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
 }
 
 model Prediction {
@@ -95,8 +117,8 @@ model Prediction {
   ppaEarned       Int      @default(0)
   createdAt       DateTime @default(now())
 
-  user    User    @relation(fields: [userId], references: [id])
   content Content @relation(fields: [contentId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
 }
 
 model PollOption {
@@ -117,57 +139,24 @@ model PollVote {
   ppaWeight    Int      @default(0)
   createdAt    DateTime @default(now())
 
-  user       User       @relation(fields: [userId], references: [id])
   pollOption PollOption @relation(fields: [pollOptionId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
 
   @@unique([userId, pollOptionId])
 }
 
-model Question {
-  id            String     @id @default(cuid())
-  contentId     String?
-  text          String
-  options       Json
-  correctAnswer String
-  category      Category
-  difficulty    Difficulty
-  qualityScore  Int        @default(0)
-  timesServed   Int        @default(0)
-  timesCorrect  Int        @default(0)
-  createdAt     DateTime   @default(now())
-
-  content  Content?          @relation(fields: [contentId], references: [id])
-  results  ChallengeResult[]
-}
-
-model ChallengeResult {
-  id          String   @id @default(cuid())
-  userId      String
-  questionId  String
-  isCorrect   Boolean
-  timeSeconds Int
-  ppaEarned   Int      @default(0)
-  streakBonus Int      @default(0)
-  createdAt   DateTime @default(now())
-
-  user     User     @relation(fields: [userId], references: [id])
-  question Question @relation(fields: [questionId], references: [id])
-}
-
 model PPATransaction {
-  id              String   @id @default(cuid())
-  userId          String
-  amount          Int                                    // delta: positive=credit, negative=debit
-  type            String                                 // earn | spend | exchange | snapshot | mandate
-  source          String                                 // poll | prediction | challenge | streak | pi_payment | mandate:<mandateId> | snapshot
-  createdAt       DateTime @default(now())
-
-  // ---- ledger fields (added in add_mandate_layer_and_ledger_chain) ----
-  balanceAfter    Int?                                   // user's balance immediately after this row was applied
-  prevHash        String?                                // sha256 hex of previous row for this user; "0"*64 for first
-  rowHash         String?  @unique                       // sha256(prevHash || canonical(payload) || createdAt)
-  idempotencyKey  String?  @unique                       // optional, for retry safety
-  isSnapshot      Boolean  @default(false)               // true for the per-user genesis snapshot row
+  id             String   @id @default(cuid())
+  userId         String
+  amount         Int
+  type           String
+  source         String
+  createdAt      DateTime @default(now())
+  balanceAfter   Int?
+  prevHash       String?
+  rowHash        String?  @unique
+  idempotencyKey String?  @unique
+  isSnapshot     Boolean  @default(false)
 
   user User @relation(fields: [userId], references: [id])
 
@@ -175,117 +164,131 @@ model PPATransaction {
   @@index([userId, isSnapshot])
 }
 
+// ---------------------------------------------------------------------------
+// PPA Ecosystem Registry
+// ---------------------------------------------------------------------------
+
 model PPAApp {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
-  slug        String   @unique
+  slug        String    @unique
   description String
   url         String
   logoUrl     String?
-  apiKey      String   @unique
-  apiKeyHash  String?  @unique                           // transitional: callers will verify against hash
+  apiKey      String    @unique
+  apiKeyHash  String?   @unique
   status      AppStatus @default(ACTIVE)
-  category    String   @default("GENERAL")
-  totalEarned Int      @default(0)
-  totalSpent  Int      @default(0)
-  userCount   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  transactions EcosystemTransaction[]
+  category    String    @default("GENERAL")
+  totalEarned Int       @default(0)
+  totalSpent  Int       @default(0)
+  userCount   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
   mandates     AgentMandate[]
+  transactions EcosystemTransaction[]
 }
 
 model EcosystemTransaction {
   id        String   @id @default(cuid())
   appId     String
-  app       PPAApp   @relation(fields: [appId], references: [id])
   piUserId  String
   username  String
   amount    Int
-  type      String   // earn | spend | exchange
+  type      String
   source    String
   createdAt DateTime @default(now())
+
+  app PPAApp @relation(fields: [appId], references: [id])
 }
 
-enum AppStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
+// ---------------------------------------------------------------------------
+// Agent mandate system
+// ---------------------------------------------------------------------------
+
+model AgentMandate {
+  id            String        @id @default(cuid())
+  piUserId      String
+  agentId       String
+  appId         String
+  scope         Json
+  cap           Int
+  spent         Int           @default(0)
+  perTxCap      Int?
+  rateLimit     Json?
+  notBefore     DateTime
+  expiresAt     DateTime
+  status        MandateStatus @default(ACTIVE)
+  signature     String
+  signingKeyId  String
+  nonceSalt     String
+  issuedAt      DateTime      @default(now())
+  revokedAt     DateTime?
+  revokedReason String?
+
+  app        PPAApp         @relation(fields: [appId], references: [id])
+  signingKey UserSigningKey @relation(fields: [signingKeyId], references: [id])
+  audits     AgentAudit[]
+  nonces     MandateNonce[]
+
+  @@index([appId, status])
+  @@index([expiresAt])
+  @@index([piUserId, status])
 }
 
+model AgentAudit {
+  id        String          @id @default(cuid())
+  mandateId String?
+  piUserId  String
+  agentId   String
+  appId     String
+  eventType AgentAuditEvent
+  payload   Json
+  prevHash  String
+  rowHash   String          @unique
+  createdAt DateTime        @default(now())
 
-// =============================================================================
-// Mandate + Ledger layer (migration: add_mandate_layer_and_ledger_chain)
-// =============================================================================
+  mandate AgentMandate? @relation(fields: [mandateId], references: [id])
+
+  @@index([mandateId])
+  @@index([piUserId, createdAt])
+}
+
+model MandateNonce {
+  id          String    @id @default(cuid())
+  mandateId   String
+  nonce       String    @unique
+  actionHash  String
+  amount      Int
+  consumed    Boolean   @default(false)
+  consumedAt  DateTime?
+  piPaymentId String?
+  issuedAt    DateTime  @default(now())
+  expiresAt   DateTime
+
+  mandate AgentMandate @relation(fields: [mandateId], references: [id])
+
+  @@index([expiresAt])
+  @@index([mandateId, consumed])
+}
 
 model UserSigningKey {
-  id          String    @id @default(cuid())
-  piUserId    String                                     // matches User.piUserId
-  publicKey   String                                     // 32-byte ed25519 public key, base64
-  label       String?                                    // optional UX label like "Phone", "Backup"
-  createdAt   DateTime  @default(now())
-  revokedAt   DateTime?
+  id        String    @id @default(cuid())
+  piUserId  String
+  publicKey String
+  label     String?
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
 
-  mandates    AgentMandate[]
+  mandates AgentMandate[]
 
   @@index([piUserId])
   @@index([piUserId, revokedAt])
 }
 
-enum MandateStatus {
-  ACTIVE
-  EXHAUSTED
-  EXPIRED
-  REVOKED
-}
-
-model AgentMandate {
-  id            String         @id @default(cuid())
-  piUserId      String                                   // matches User.piUserId
-  agentId       String                                   // identifier of the AI agent
-  appId         String                                   // PPAApp.id this mandate covers
-  scope         Json                                     // see ScopeShape in @/types/mandate
-  cap           Int                                      // total PPA spendable across mandate lifetime
-  spent         Int            @default(0)
-  perTxCap      Int?                                     // optional per-transaction cap
-  rateLimit     Json?                                    // { windowSeconds, maxTx } or null
-  notBefore     DateTime
-  expiresAt     DateTime
-  status        MandateStatus  @default(ACTIVE)
-  signature     String                                   // base64 ed25519 sig over canonical JSON
-  signingKeyId  String                                   // FK -> UserSigningKey.id
-  nonceSalt     String                                   // 32-byte hex, makes mandates unique
-  issuedAt      DateTime       @default(now())
-  revokedAt     DateTime?
-  revokedReason String?
-
-  signingKey  UserSigningKey @relation(fields: [signingKeyId], references: [id])
-  app         PPAApp         @relation(fields: [appId], references: [id])
-  nonces      MandateNonce[]
-  audits      AgentAudit[]
-
-  @@index([piUserId, status])
-  @@index([appId, status])
-  @@index([expiresAt])
-}
-
-model MandateNonce {
-  id           String    @id @default(cuid())
-  mandateId    String
-  nonce        String    @unique                         // 32-byte hex
-  actionHash   String                                    // sha256 of {appId, action, amount, targetId}
-  amount       Int
-  consumed     Boolean   @default(false)
-  consumedAt   DateTime?
-  piPaymentId  String?                                   // Pi payment ID once settled
-  issuedAt     DateTime  @default(now())
-  expiresAt    DateTime                                  // short — 60s default
-
-  mandate AgentMandate @relation(fields: [mandateId], references: [id])
-
-  @@index([mandateId, consumed])
-  @@index([expiresAt])
-}
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
 
 enum AgentAuditEvent {
   MANDATE_ISSUED
@@ -298,116 +301,45 @@ enum AgentAuditEvent {
   RATE_LIMIT_HIT
 }
 
-model AgentAudit {
-  id        String           @id @default(cuid())
-  mandateId String?
-  piUserId  String                                       // matches User.piUserId
-  agentId   String
-  appId     String
-  eventType AgentAuditEvent
-  payload   Json                                         // verb-specific data
-  prevHash  String                                       // sha256 of previous row for this piUserId
-  rowHash   String           @unique                     // sha256(prevHash || canonical(payload) || createdAt)
-  createdAt DateTime         @default(now())
-
-  mandate AgentMandate? @relation(fields: [mandateId], references: [id])
-
-  @@index([piUserId, createdAt])
-  @@index([mandateId])
+enum AppStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }
 
-// Enums
-enum ContentSource {
-  MANUAL
-  AI_SONNET_46
-  AI_HAIKU_45
-  AI_OPUS_47
-  IMPORTED
+enum Category {
+  SPORTS
+  FINANCE
+  TECH
+  POLITICS
+  SOCIAL
+  GENERAL
 }
 
-enum DraftStatus {
-  PENDING_REVIEW
-  APPROVED
-  REJECTED
-  PUBLISHED
+enum ContentStatus {
+  PENDING
+  ACTIVE
+  RESOLVED
+  ARCHIVED
 }
 
-// Question — add explanation, source, createdBy, indexes; switch options to String[]
-model Question {
-  id            String        @id @default(cuid())
-  contentId     String?
-  text          String
-  options       String[]                                    // CHANGED: Json → String[]
-  correctAnswer String
-  explanation   String?                                     // NEW
-  category      Category
-  difficulty    Difficulty
-  qualityScore  Int           @default(0)
-  timesServed   Int           @default(0)
-  timesCorrect  Int           @default(0)
-  source        ContentSource @default(MANUAL)              // NEW
-  createdBy     String?                                     // NEW
-  createdAt     DateTime      @default(now())
-
-  content Content?          @relation(fields: [contentId], references: [id])
-  results ChallengeResult[]
-
-  @@index([category, difficulty])                            // NEW
-  @@index([category, createdAt(sort: Desc)])                 // NEW
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
 }
 
-// New review queue
-model AIContentDraft {
-  id           String      @id @default(cuid())
-  type         String                                        // "qa" | "poll"
-  category     Category
-  difficulty   Difficulty?
-  payload      Json
-  status       DraftStatus @default(PENDING_REVIEW)
-  sourceApp    String                                        // "PPA" | "LOPIPO" | ...
-  sourceModel  String
-  reviewedBy   String?
-  reviewedAt   DateTime?
-  publishedId  String?
-  rejectReason String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-
-  @@index([status])
-  @@index([category, status])
-  @@index([sourceApp, status])
+enum MandateStatus {
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+  REVOKED
 }
 
-// New system-level AI generation log (separate from EcosystemTransaction)
-model AIGenerationLog {
-  id                 String      @id @default(cuid())
-  appId              String
-  app                PPAApp      @relation(fields: [appId], references: [id])
-  contentType        String
-  category           Category
-  difficulty         Difficulty?
-  topic              String?
-  model              String
-  requested          Int
-  returned           Int
-  duplicatesRejected Int         @default(0)
-  inputTokens        Int?
-  outputTokens       Int?
-  cacheReadTokens    Int?
-  cacheWriteTokens   Int?
-  latencyMs          Int?
-  status             String      @default("SUCCESS")
-  errorMessage       String?
-  createdAt          DateTime    @default(now())
-
-  @@index([appId, createdAt])
-  @@index([appId, status, createdAt])
+enum UserTier {
+  NEWCOMER
+  MEMBER
+  TRUSTED
+  EXPERT
+  ELITE
 }
-
-// PPAApp — add the back-relation for the new log
-model PPAApp {
-  // ... all existing fields unchanged
-  aiGenerationLogs AIGenerationLog[]                         // NEW back-relation
-}
-
-// EcosystemTransaction — UNCHANGED. Stays user-level.
