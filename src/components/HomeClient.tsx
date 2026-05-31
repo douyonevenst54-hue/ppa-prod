@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "./AuthProvider";
+import SignInButton from "@/components/SignInButton";
 
 const TIER_COLORS: Record<string, string> = {
   NEWCOMER: "#a0a0b8",
@@ -35,44 +36,52 @@ export default function HomeClient() {
   }
 
   return (
-    <div style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      padding: "20px 16px 12px",
-      position: "sticky",
-      top: 0,
-      background: "var(--bg-primary)",
-      zIndex: 10,
-      borderBottom: "1px solid var(--border)",
-    }}>
-      <div>
-        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>
-          BALANCE
+    <>
+      {/* SignInButton renders only when status === 'public' (i.e. not yet
+          authenticated). Required by Pi App Studio's verification flow. */}
+      <div style={{ padding: "12px 16px 0", display: "flex", justifyContent: "center" }}>
+        <SignInButton />
+      </div>
+
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: "20px 16px 12px",
+        position: "sticky",
+        top: 0,
+        background: "var(--bg-primary)",
+        zIndex: 10,
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>
+            BALANCE
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "var(--accent-gold)" }}>
+            {user?.ppaBalance || 0}{" "}
+            <span style={{ fontSize: 13 }}>PPA</span>
+          </div>
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: "var(--accent-gold)" }}>
-          {user?.ppaBalance || 0}{" "}
-          <span style={{ fontSize: 13 }}>PPA</span>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>
+            {user?.username || ""}
+          </div>
+          <span style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "4px 10px",
+            borderRadius: 20,
+            fontSize: 11,
+            fontWeight: 600,
+            background: TIER_COLORS[user?.tier || "NEWCOMER"] + "22",
+            color: TIER_COLORS[user?.tier || "NEWCOMER"],
+          }}>
+            ⭐ {TIER_LABELS[user?.tier || "NEWCOMER"]}
+          </span>
         </div>
       </div>
-      <div style={{ textAlign: "right" }}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>
-          {user?.username || ""}
-        </div>
-        <span style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4,
-          padding: "4px 10px",
-          borderRadius: 20,
-          fontSize: 11,
-          fontWeight: 600,
-          background: TIER_COLORS[user?.tier || "NEWCOMER"] + "22",
-          color: TIER_COLORS[user?.tier || "NEWCOMER"],
-        }}>
-          ⭐ {TIER_LABELS[user?.tier || "NEWCOMER"]}
-        </span>
-      </div>
-    </div>
+    </>
   );
 }

@@ -1,5 +1,4 @@
 "use client";
-
 import { createContext, useContext, ReactNode, useCallback } from "react";
 import { usePiAuth, PPAUser, AuthStatus } from "@/hooks/usePiAuth";
 
@@ -7,23 +6,26 @@ interface AuthContextType {
   user: PPAUser | null;
   status: AuthStatus;
   loading: boolean;
+  signIn: () => Promise<void>;
   signOut: () => void;
   forceReauth: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateUser: (u: PPAUser) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   status: "loading",
   loading: true,
+  signIn: async () => {},
   signOut: () => {},
   forceReauth: async () => {},
   refreshUser: async () => {},
+  updateUser: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = usePiAuth();
-
   const refreshUser = useCallback(async () => {
     if (!auth.user?.id) return;
     try {
@@ -36,7 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Failed to refresh user:", err);
     }
   }, [auth]);
-
   return (
     <AuthContext.Provider value={{ ...auth, refreshUser }}>
       {children}

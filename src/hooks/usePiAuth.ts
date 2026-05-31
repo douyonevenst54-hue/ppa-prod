@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export interface PPAUser {
   id: string;
@@ -25,7 +25,12 @@ interface AuthResult {
 declare global {
   interface Window {
     Pi?: {
-      init: (config: { version: string; sandbox?: boolean }) => void;
+      // init may be sync (legacy) or return a Promise (current docs).
+      // We treat the return as PromiseLike so awaiting is always safe.
+      init: (config: {
+        version: string;
+        sandbox?: boolean;
+      }) => void | Promise<void>;
       authenticate: (
         scopes: string[],
         onIncompletePaymentFound: (payment: unknown) => void
@@ -38,7 +43,10 @@ declare global {
         },
         callbacks: {
           onReadyForServerApproval: (paymentId: string) => void;
-          onReadyForServerCompletion: (paymentId: string, txid: string) => void;
+          onReadyForServerCompletion: (
+            paymentId: string,
+            txid: string
+          ) => void;
           onCancel: (paymentId: string) => void;
           onError: (error: Error, payment?: unknown) => void;
         }
@@ -47,8 +55,6 @@ declare global {
   }
 }
 
-// "public" = browsing outside Pi Browser. App is fully accessible, but
-// actions requiring Pi SDK (login, payments) are gated at the action level.
 export type AuthStatus = "loading" | "authenticated" | "public";
 
 export function usePiAuth() {
@@ -81,16 +87,14 @@ export function usePiAuth() {
     initPiAuth();
   }, []);
 
+  /**
+   * Initialize Pi SDK and authenticate the user automatically on app load.
+   * Detects Pi Browser by waiting for window.Pi to appear (the SDK is only
+   * injected in Pi Browser). Falls through to public mode after 6 seconds
+   * if the SDK never appears.
+   */
   async function initPiAuth() {
     try {
-      // Pi Browser injects the Pi SDK as window.Pi. We wait briefly for it
-      // to appear — if it shows up, we're in Pi Browser and proceed with
-      // authentication. If it never appears after ~6 seconds, we're in a
-      // regular browser and fall through to public mode.
-      //
-      // We do NOT check the user agent — Pi Browser's UA string varies
-      // across iOS/Android versions and Pi Browser updates, and matching
-      // against a specific UA fragment caused regressions.
       let attempts = 0;
       const maxAttempts = 20; // 20 × 300ms = 6 seconds
       while (!window.Pi && attempts < maxAttempts) {
@@ -99,79 +103,127 @@ export function usePiAuth() {
       }
 
       if (!window.Pi) {
-        // SDK never injected → not in Pi Browser → public mode.
         setStatus("public");
         setLoading(false);
         return;
       }
 
-      // We're in Pi Browser. Initialize and authenticate.
-      window.Pi.init({
-        version: "2.0",
-        sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
-      });
+      // Pi.init may be sync or return a Promise depending on SDK version.
+      // Promise.resolve(...) handles both — `await` is safe either way.
+      await Promise.resolve(
+        window.Pi.init({
+          version: "2.0",
+          sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
+        })
+      );
 
-      // Give the SDK a moment to settle after init before calling authenticate.
-      await new Promise((r) => setTimeout(r, 500));
-
-      // Race the authenticate call against a 15-second timeout. If Pi Browser's
-      // native bridge is unresponsive (e.g. SDK loaded but native layer broken),
-      // we don't want to hang for 2 minutes — fall through to public mode.
+      // Race authenticate against a 15-second timeout so regular browsers
+      // that load the SDK script don't hang on a missing native bridge.
       const authResult = await Promise.race([
         window.Pi.authenticate(
           ["username", "payments", "wallet_address"],
-          async (payment) => {
-            console.log("Incomplete payment found:", payment);
-            try {
-              await fetch("/api/payments/approve", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  paymentId: (payment as { identifier: string }).identifier,
-                }),
-              });
-            } catch (e) {
-              console.error("Incomplete payment handling failed:", e);
-            }
-          }
+          onIncompletePaymentFound
         ),
-        new Promise<null>((resolve) =>
-          setTimeout(() => resolve(null), 15000)
-        ),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
       ]);
 
       if (!authResult) {
-        // Timed out waiting for native bridge response
-        console.warn("[usePiAuth] Pi.authenticate() timed out, falling back to public mode");
+        console.warn(
+          "[usePiAuth] Pi.authenticate() timed out, falling back to public mode"
+        );
         setStatus("public");
         setLoading(false);
         return;
       }
 
-      await signInWithPi(authResult.user.uid, authResult.user.username);
+      await signInWithPi(authResult);
       setStatus("authenticated");
     } catch (err) {
-      console.error("Pi auth error:", err);
+      console.error("[usePiAuth] auth error:", err);
       setStatus("public");
     } finally {
       setLoading(false);
     }
   }
 
-  async function signInWithPi(piUserId: string, username: string) {
+  async function onIncompletePaymentFound(payment: unknown) {
+    console.log("Incomplete payment found:", payment);
+    try {
+      await fetch("/api/payments/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentId: (payment as { identifier: string }).identifier,
+        }),
+      });
+    } catch (e) {
+      console.error("Incomplete payment handling failed:", e);
+    }
+  }
+
+  /**
+   * Send the Pi accessToken to the backend. The backend validates it
+   * via GET https://api.minepi.com/v2/me and is the only source of
+   * truth for the resolved user record.
+   */
+  async function signInWithPi(authResult: AuthResult) {
     const res = await fetch("/api/auth/pi", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ piUserId, username }),
+      body: JSON.stringify({
+        accessToken: authResult.accessToken,
+        // Hint for new-user creation only; backend re-derives from /v2/me.
+        hintUsername: authResult.user.username,
+      }),
     });
-    const data = await res.json();
-    if (data.user) {
-      setUser(data.user);
-      localStorage.setItem("ppa_user", JSON.stringify(data.user));
-    } else {
-      throw new Error("Failed to authenticate");
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Auth failed: ${res.status} ${errText}`);
     }
+
+    const data = await res.json();
+    if (!data.user) {
+      throw new Error("Auth response missing user");
+    }
+
+    setUser(data.user);
+    localStorage.setItem("ppa_user", JSON.stringify(data.user));
   }
+
+  /**
+   * Manual sign-in trigger. Used by the visible "Sign in with Pi" button
+   * (required by Pi App Studio's verification flow, which waits for an
+   * explicit Pi.authenticate call after the page loads).
+   */
+  const signIn = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (!window.Pi) {
+        setStatus("public");
+        return;
+      }
+
+      await Promise.resolve(
+        window.Pi.init({
+          version: "2.0",
+          sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
+        })
+      );
+
+      const authResult = await window.Pi.authenticate(
+        ["username", "payments", "wallet_address"],
+        onIncompletePaymentFound
+      );
+
+      await signInWithPi(authResult);
+      setStatus("authenticated");
+    } catch (err) {
+      console.error("[usePiAuth] manual signIn failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   function updateUser(updatedUser: PPAUser) {
     setUser(updatedUser);
@@ -182,7 +234,10 @@ export function usePiAuth() {
     try {
       localStorage.removeItem("ppa_user");
       Object.keys(localStorage).forEach((k) => {
-        if (k.toLowerCase().includes("pi_") || k.toLowerCase().includes("ppa_")) {
+        if (
+          k.toLowerCase().includes("pi_") ||
+          k.toLowerCase().includes("ppa_")
+        ) {
           localStorage.removeItem(k);
         }
       });
@@ -203,29 +258,19 @@ export function usePiAuth() {
     }
 
     try {
-      window.Pi.init({
-        version: "2.0",
-        sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
-      });
+      await Promise.resolve(
+        window.Pi.init({
+          version: "2.0",
+          sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
+        })
+      );
       await new Promise((r) => setTimeout(r, 300));
 
       const auth = await window.Pi.authenticate(
         ["username", "payments", "wallet_address"],
-        async (payment) => {
-          try {
-            await fetch("/api/payments/approve", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                paymentId: (payment as { identifier: string }).identifier,
-              }),
-            });
-          } catch (e) {
-            console.error("Incomplete payment handling failed:", e);
-          }
-        }
+        onIncompletePaymentFound
       );
-      await signInWithPi(auth.user.uid, auth.user.username);
+      await signInWithPi(auth);
       setStatus("authenticated");
     } catch (err) {
       console.error("Force reauth failed:", err);
@@ -233,5 +278,5 @@ export function usePiAuth() {
     }
   }
 
-  return { user, status, loading, signOut, forceReauth, updateUser };
+  return { user, status, loading, signIn, signOut, forceReauth, updateUser };
 }
