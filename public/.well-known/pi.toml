@@ -4,9 +4,9 @@ description = "Predict. Challenge. Earn. A skill-based prediction and challenge 
 version = "1.0.0"
 
 [urls]
-app = "https://pappad.app"
-privacy_policy = "https://pappad.app/privacy"
-terms_of_service = "https://pappad.app/terms"
+app = "https://ppa-prod.vercel.app"
+privacy_policy = "https://ppa-prod.vercel.app/privacy"
+terms_of_service = "https://ppa-prod.vercel.app/terms"
 
 [permissions]
 payments = true
