@@ -5,7 +5,7 @@
  *  - Match-outcome predictions (3 options each: home win / draw / away win)
  *  - Tournament-level predictions (champion, top scorer)
  *
- * Both live on the `Content` model (type: "PREDICTION", category: SPORTS,
+ * Both live on the `Content` model (type: "prediction", category: SPORTS,
  * status: ACTIVE), with `PollOption` rows for the choices. `endsAt` is the
  * kickoff time (matches) or the final date (tournament-level), which is the
  * cutoff for voting.
@@ -96,7 +96,7 @@ async function createPrediction(
       title,
       category: "SPORTS",
       status: "ACTIVE",
-      type: "PREDICTION",
+      type: "prediction",
       endsAt: new Date(endsAt),
       pollOptions: {
         create: options.map((text) => ({ text })),
