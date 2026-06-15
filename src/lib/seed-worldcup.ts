@@ -70,25 +70,11 @@ const topScorerContenders = [
 async function resolveCreatorId(): Promise<string> {
   if (CREATOR_ID) return CREATOR_ID;
 
-  // Try common admin/owner conventions; fall back to first user.
-  // Adjust the `where` if your User model uses a different role flag.
-  const admin = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { role: "ADMIN" as any },
-        { role: "OWNER" as any },
-        { isAdmin: true as any },
-      ],
-    },
-  }).catch(() => null);
-
-  if (admin) return admin.id;
-
   const first = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
   if (!first) {
     throw new Error("No users found — create a user before seeding, or set CREATOR_ID.");
   }
-  console.warn(`⚠️  No admin/owner found; attributing content to first user: ${first.id}`);
+  console.warn(`⚠️  No CREATOR_ID set; attributing to first user: ${first.id}`);
   return first.id;
 }
 
