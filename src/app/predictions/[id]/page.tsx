@@ -11,6 +11,7 @@ interface Prediction {
   category: string;
   participantCount: number;
   endsAt: string;
+  pollOptions: { id: string; text: string }[];
 }
 
 const CONFIDENCE_LABELS = ["", "Low", "Medium", "High"];
@@ -205,25 +206,25 @@ export default function PredictionDetailPage() {
           <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 10, fontWeight: 600, letterSpacing: 1 }}>
             YOUR ANSWER
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            {["Yes", "No"].map((option) => (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {(prediction?.pollOptions ?? []).map((option) => (
               <button
-                key={option}
-                onClick={() => setSelectedAnswer(option)}
+                key={option.id}
+                onClick={() => setSelectedAnswer(option.text)}
                 style={{
-                  flex: 1,
+                  width: "100%",
                   padding: "14px",
                   borderRadius: 12,
-                  border: `2px solid ${selectedAnswer === option ? "var(--accent-primary)" : "var(--border)"}`,
-                  background: selectedAnswer === option ? "#6c63ff22" : "var(--bg-card)",
-                  color: selectedAnswer === option ? "var(--accent-primary)" : "var(--text-secondary)",
+                  border: `2px solid ${selectedAnswer === option.text ? "var(--accent-primary)" : "var(--border)"}`,
+                  background: selectedAnswer === option.text ? "#6c63ff22" : "var(--bg-card)",
+                  color: selectedAnswer === option.text ? "var(--accent-primary)" : "var(--text-secondary)",
                   fontSize: 16,
                   fontWeight: 700,
                   cursor: "pointer",
                   transition: "all 0.2s",
                 }}
               >
-                {option}
+                {option.text}
               </button>
             ))}
           </div>

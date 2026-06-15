@@ -13,6 +13,7 @@ export async function GET(
       include: {
         creator: { select: { username: true } },
         _count: { select: { predictions: true } },
+        pollOptions: { select: { id: true, text: true } },
       },
     });
 
