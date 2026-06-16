@@ -1,1 +1,2 @@
-<paste Pi's exact pi.toml contents here>
+[validation]
+validation_key = "7d4222f6d11561917f3ab31c2f393decb2682314b170683a4a71b039098c54612314255ad3fefae80ecd08587703ef8fa50dcdeec84ede9e53e6cc1097c64609"
