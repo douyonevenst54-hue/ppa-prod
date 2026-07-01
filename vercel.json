@@ -1,0 +1,63 @@
+{
+  "functions": {
+    "app/api/lottery/purchase/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/lottery/complete-payment/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/paid-polls/[pollId]/votes/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/group-lottery/[groupId]/members/route.ts": {
+      "maxDuration": 20
+    },
+    "app/api/profile/[uid]/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/notifications/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/referral/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/ads/route.ts": {
+      "maxDuration": 10
+    },
+    "app/api/health/route.ts": {
+      "maxDuration": 5
+    }
+  },
+  "buildCommand": "next build",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains; preload"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "ALLOWALL"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "geolocation=(), microphone=(), camera=()"
+        }
+      ]
+    }
+  ]
+}

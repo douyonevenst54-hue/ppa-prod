@@ -219,7 +219,9 @@ export async function generateQuestions(
     .filter(Boolean)
     .join("\n");
 
-  const response = await anthropic.messages.create({
+  let response;
+  try {
+    response = await anthropic.messages.create({
     model: MODEL_ID,
     max_tokens: 4096,
     system: [
@@ -239,7 +241,42 @@ export async function generateQuestions(
         : []),
     ],
     messages: [{ role: "user", content: userPrompt }],
-  });
+    });
+  } catch (err) {
+    // Classify Anthropic API failures so the cause is obvious in logs.
+    const status =
+      typeof err === "object" && err !== null && "status" in err
+        ? (err as { status?: number }).status
+        : undefined;
+    if (status === 401 || status === 403) {
+      console.error(
+        "[ai-content-generator] Auth/model error (" +
+          status +
+          "): check ANTHROPIC_API_KEY and that MODEL_ID '" +
+          MODEL_ID +
+          "' is valid for this account."
+      );
+      throw new Error("Claude auth/model error (" + status + ")");
+    }
+    if (status === 429) {
+      console.error(
+        "[ai-content-generator] Rate limited (429): too many requests for current usage tier."
+      );
+      throw new Error("Claude rate limited (429)");
+    }
+    if (status === 400 || status === 402) {
+      console.error(
+        "[ai-content-generator] Request rejected (" +
+          status +
+          "): often means the Anthropic credit balance is exhausted. Top up at console.anthropic.com."
+      );
+      throw new Error("Claude request rejected (" + status + ") - check credit balance");
+    }
+    console.error("[ai-content-generator] Claude call failed:", err);
+    throw new Error(
+      "Claude call failed: " + (err instanceof Error ? err.message : "unknown")
+    );
+  }
 
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") {
