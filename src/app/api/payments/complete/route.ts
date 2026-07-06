@@ -1,62 +1,66 @@
+// src/app/api/payments/complete/route.ts
+//
+// Completes a Pi payment that already has a blockchain txid.
+// Used by onIncompletePaymentFound when the SDK reports an orphaned
+// payment whose transaction went through but was never completed
+// server-side (the cause of `ongoing_payment_found` blockers).
+
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+
+const PI_API_BASE = "https://api.minepi.com/v2";
 
 export async function POST(req: NextRequest) {
   try {
-    const { paymentId, txid, userId, ppaReward } = await req.json();
+    const { paymentId, txid } = await req.json();
 
-    if (!paymentId || !txid) {
+    if (!paymentId || typeof paymentId !== "string") {
       return NextResponse.json(
-        { error: "paymentId and txid required" },
+        { error: "paymentId required" },
         { status: 400 }
       );
     }
+    if (!txid || typeof txid !== "string") {
+      return NextResponse.json({ error: "txid required" }, { status: 400 });
+    }
 
-    // Complete payment with Pi Network
-    const res = await fetch(
-      `https://api.minepi.com/v2/payments/${paymentId}/complete`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Key ${process.env.PI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ txid }),
-      }
-    );
+    const apiKey = process.env.PI_API_KEY;
+    if (!apiKey) {
+      console.error("[payments/complete] PI_API_KEY not configured");
+      return NextResponse.json(
+        { error: "Server misconfigured" },
+        { status: 500 }
+      );
+    }
 
-    const data = await res.json();
+    const res = await fetch(`${PI_API_BASE}/payments/${paymentId}/complete`, {
+      method: "POST",
+      headers: {
+        Authorization: `Key ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ txid }),
+      cache: "no-store",
+    });
+
+    const data = await res.json().catch(() => null);
 
     if (!res.ok) {
-      console.error("Pi complete error:", data);
+      console.error(
+        `[payments/complete] Pi API returned ${res.status}:`,
+        data
+      );
       return NextResponse.json(
-        { error: "Failed to complete payment" },
-        { status: 400 }
+        { error: "Pi completion failed", detail: data },
+        { status: res.status }
       );
     }
 
-    // Award PPA if applicable
-    if (userId && ppaReward) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { ppaBalance: { increment: ppaReward } },
-      });
-
-      await prisma.pPATransaction.create({
-        data: {
-          userId,
-          amount: ppaReward,
-          type: "earn",
-          source: "pi_payment_reward",
-        },
-      });
-    }
-
+    console.log(`[payments/complete] Completed payment ${paymentId}`);
     return NextResponse.json({ success: true, payment: data });
   } catch (error) {
-    console.error("Complete error:", error);
+    console.error("[payments/complete] error:", error);
     return NextResponse.json(
-      { error: "Failed to complete payment" },
+      { error: "Completion failed" },
       { status: 500 }
     );
   }

@@ -17,6 +17,18 @@ export interface PPAUser {
   correctChallenges: number;
 }
 
+// Add near the top of the hook file
+async function authenticateWithTimeout(
+  scopes: string[],
+  onIncompletePaymentFound: (p: unknown) => void,
+  ms = 15000
+): Promise<AuthResult | null> {
+  return Promise.race([
+    window.Pi!.authenticate(scopes, onIncompletePaymentFound),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 interface AuthResult {
   user: { uid: string; username: string };
   accessToken: string;
@@ -147,19 +159,30 @@ export function usePiAuth() {
   }
 
   async function onIncompletePaymentFound(payment: unknown) {
-    console.log("Incomplete payment found:", payment);
-    try {
+  console.log("Incomplete payment found:", payment);
+  const p = payment as {
+    identifier: string;
+    transaction?: { txid?: string } | null;
+  };
+  try {
+    if (p.transaction?.txid) {
+      // Payment already has a blockchain tx — complete it server-side
+      await fetch("/api/payments/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId: p.identifier, txid: p.transaction.txid }),
+      });
+    } else {
       await fetch("/api/payments/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paymentId: (payment as { identifier: string }).identifier,
-        }),
+        body: JSON.stringify({ paymentId: p.identifier }),
       });
-    } catch (e) {
-      console.error("Incomplete payment handling failed:", e);
     }
+  } catch (e) {
+    console.error("Incomplete payment handling failed:", e);
   }
+}
 
   /**
    * Send the Pi accessToken to the backend. The backend validates it
@@ -197,33 +220,39 @@ export function usePiAuth() {
    * explicit Pi.authenticate call after the page loads).
    */
   const signIn = useCallback(async () => {
-    setLoading(true);
-    try {
-      if (!window.Pi) {
-        setStatus("public");
-        return;
-      }
-
-      await Promise.resolve(
-        window.Pi.init({
-          version: "2.0",
-          sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
-        })
-      );
-
-      const authResult = await window.Pi.authenticate(
-        ["username", "payments", "wallet_address"],
-        onIncompletePaymentFound
-      );
-
-      await signInWithPi(authResult);
-      setStatus("authenticated");
-    } catch (err) {
-      console.error("[usePiAuth] manual signIn failed:", err);
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  try {
+    if (!window.Pi) {
+      setStatus("public");
+      return;
     }
-  }, []);
+
+    await Promise.resolve(
+      window.Pi.init({
+        version: "2.0",
+        sandbox: process.env.NEXT_PUBLIC_PI_SANDBOX === "true",
+      })
+    );
+
+    const authResult = await authenticateWithTimeout(
+      ["username", "payments", "wallet_address"],
+      onIncompletePaymentFound
+    );
+
+    if (!authResult) {
+      alert("Pi sign-in timed out. Please close and reopen the app, then try again.");
+      return;
+    }
+
+    await signInWithPi(authResult);
+    setStatus("authenticated");
+  } catch (err) {
+    console.error("[usePiAuth] manual signIn failed:", err);
+    alert("Sign-in failed. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   function updateUser(updatedUser: PPAUser) {
     setUser(updatedUser);
