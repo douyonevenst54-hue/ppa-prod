@@ -77,47 +77,57 @@ export async function POST(req: NextRequest) {
     const effectiveUsername =
       username || (typeof hintUsername === "string" ? hintUsername : piUserId);
 
-    // Legacy migration: older rows had the username copied into piUserId.
-    // If a row exists with piUserId === username and no row with the real
-    // piUserId yet, migrate the legacy row in place.
-    if (piUserId !== effectiveUsername) {
-      const legacy = await prisma.user.findUnique({
-        where: { piUserId: effectiveUsername },
-      });
-      const real = await prisma.user.findUnique({ where: { piUserId } });
-      if (legacy && !real) {
-        const migrated = await prisma.user.update({
-          where: { id: legacy.id },
-          data: {
-            piUserId,
-            username: effectiveUsername,
-            lastActiveDate: new Date(),
-          },
-        });
-        return NextResponse.json({ user: migrated });
-      }
-    }
-
-    // Standard upsert by piUserId. The data on /v2/me wins over any
-    // local cache.
-    const user = await prisma.user.upsert({
-      where: { piUserId },
-      update: {
-        username: effectiveUsername,
-        lastActiveDate: new Date(),
-      },
-      create: {
-        piUserId,
-        username: effectiveUsername,
-        ppaBalance: 100,
-        accuracyRate: 0,
-        reputationScore: 0,
-        streakDays: 0,
-        tier: "NEWCOMER",
-        totalPredictions: 0,
-        correctPredictions: 0,
-      },
+  // Resolve by piUserId first — the only trusted identity key.
+    const byPiId = await prisma.user.findUnique({ where: { piUserId } });
+    // Any row currently holding this username (may be a legacy duplicate).
+    const byUsername = await prisma.user.findUnique({
+      where: { username: effectiveUsername },
     });
+
+    let user;
+
+    if (byPiId) {
+      // Normal case: user exists. Only sync username if no OTHER row owns it.
+      const usernameConflict = byUsername && byUsername.id !== byPiId.id;
+      user = await prisma.user.update({
+        where: { id: byPiId.id },
+        data: {
+          ...(usernameConflict ? {} : { username: effectiveUsername }),
+          lastActiveDate: new Date(),
+        },
+      });
+      if (usernameConflict) {
+        console.warn(
+          `[auth/pi] username "${effectiveUsername}" held by user ${byUsername.id}; ` +
+            `signed in ${byPiId.id} without renaming. Needs manual merge.`
+        );
+      }
+    } else if (byUsername) {
+      // Legacy row owns the username but has a stale/absent piUserId.
+      // Claim it for this Pi identity (preserves balance & stats).
+      user = await prisma.user.update({
+        where: { id: byUsername.id },
+        data: { piUserId, lastActiveDate: new Date() },
+      });
+      console.log(
+        `[auth/pi] migrated legacy user ${byUsername.id} to piUserId ${piUserId}`
+      );
+    } else {
+      // Brand new user.
+      user = await prisma.user.create({
+        data: {
+          piUserId,
+          username: effectiveUsername,
+          ppaBalance: 100,
+          accuracyRate: 0,
+          reputationScore: 0,
+          streakDays: 0,
+          tier: "NEWCOMER",
+          totalPredictions: 0,
+          correctPredictions: 0,
+        },
+      });
+    }
 
     return NextResponse.json({ user });
   } catch (error) {
