@@ -77,23 +77,21 @@ export function usePiAuth() {
   useEffect(() => {
     const cached = localStorage.getItem("ppa_user");
     if (cached) {
-  const parsed = JSON.parse(cached);
-  // ...existing checks...
-  // Validate against the server before trusting the cache:
-  fetch(`/api/user/${parsed.id}`)
-    .then((r) => {
-      if (!r.ok) throw new Error("stale");
-      setUser(parsed);
-      setStatus("authenticated");
-    })
-    .catch(() => {
-      localStorage.removeItem("ppa_user");
-      initPiAuth(); // fall through to fresh Pi auth
-    })
-    .finally(() => setLoading(false));
-  return;
-}
-        localStorage.removeItem("ppa_user");
+      try {
+        const parsed = JSON.parse(cached);
+        // Validate against the server before trusting the cache:
+        fetch(`/api/user/${parsed.id}`)
+          .then((r) => {
+            if (!r.ok) throw new Error("stale");
+            setUser(parsed);
+            setStatus("authenticated");
+          })
+          .catch(() => {
+            localStorage.removeItem("ppa_user");
+            initPiAuth(); // fall through to fresh Pi auth
+          })
+          .finally(() => setLoading(false));
+        return;
       } catch {
         localStorage.removeItem("ppa_user");
       }

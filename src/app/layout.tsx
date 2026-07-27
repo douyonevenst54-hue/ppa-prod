@@ -3,6 +3,7 @@ import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import { AuthProvider } from "@/components/AuthProvider";
 import PiBrowserBanner from "@/components/PiBrowserBanner";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "Pap-Pad-App",
@@ -26,6 +27,7 @@ export default function RootLayout({
             <BottomNav />
           </PiBrowserBanner>
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
