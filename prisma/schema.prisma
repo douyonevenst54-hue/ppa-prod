@@ -72,6 +72,8 @@ model Content {
   pollOptions PollOption[]
   predictions Prediction[]
   questions   Question[]
+  outcome     String?
+  settledAt   DateTime?
 }
 
 model Question {
@@ -119,6 +121,7 @@ model Prediction {
 
   content Content @relation(fields: [contentId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
+  @@unique([userId, contentId])
 }
 
 model PollOption {
