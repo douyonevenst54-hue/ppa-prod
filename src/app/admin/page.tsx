@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
+import { CreateMatchForm } from "@/components/admin/CreateMatchForm";
 
 interface AdminPrediction {
   id: string;
@@ -268,6 +269,9 @@ export default function AdminPage() {
         {/* ── PREDICTIONS TAB ── */}
         {activeTab === "predictions" && (
           <>
+            {user && (
+              <CreateMatchForm userId={user.id} onCreated={fetchPredictions} />
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
               {[
                 { label: "Total", value: predictions.length, color: "var(--text-primary)" },
