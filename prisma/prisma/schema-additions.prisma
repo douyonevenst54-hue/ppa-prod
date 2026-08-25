@@ -1,0 +1,86 @@
+// ============================================================================
+// PPA compliance migration — additions only.
+//
+// Merge these into your existing schema.prisma, then:
+//
+//   npx prisma migrate dev --name compliance_topup_agegate_privacy
+//
+// Never `prisma db push`.
+//
+// Nothing here is destructive. The old redemption models (if you have any) can
+// stay in place — the route that used them is a 410 now, so they'll simply stop
+// receiving writes. Drop them in a separate migration once you're confident.
+// ============================================================================
+
+// --- Add these fields to your existing User model --------------------------
+//
+// model User {
+//   ...existing fields...
+//
+//   /// When the user confirmed they meet the minimum age. Null = never asked.
+//   /// We store the confirmation, not a date of birth.
+//   ageAttestedAt      DateTime?
+//   ageAttestedMin     Int?
+//
+//   /// User has removed themselves from all public leaderboards.
+//   leaderboardOptOut  Boolean   @default(false)
+//
+//   /// Soft delete. Set on self-service deletion; identifiers are scrubbed at
+//   /// the same time. Every public query must filter on `deletedAt: null`.
+//   deletedAt          DateTime?
+//
+//   /// Resolved/correct counts, denormalised so the leaderboard can rank on
+//   /// them without a join. Keep them updated in the same transaction that
+//   /// resolves a prediction.
+//   predictionsResolved Int @default(0)
+//   predictionsCorrect  Int @default(0)
+//
+//   topUps             TopUp[]
+//   redemptionAttempts RedemptionAttempt[]
+//
+//   @@index([deletedAt, leaderboardOptOut])
+//   @@index([predictionsResolved])
+// }
+
+enum TopUpStatus {
+  PENDING
+  APPROVED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+/// One row per Pi payment used to buy PPA.
+///
+/// `piPaymentId` is unique, and that uniqueness is the whole anti-double-credit
+/// mechanism: approve upserts on it, complete reads it inside the transaction
+/// and refuses to credit twice. This is the fix for stuck/replayed payments.
+model TopUp {
+  id           String      @id @default(cuid())
+  piPaymentId  String      @unique
+  piTxid       String?
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+  amountPi     Decimal     @db.Decimal(18, 8)
+  ppaAmount    Int
+  status       TopUpStatus @default(PENDING)
+  createdAt    DateTime    @default(now())
+  completedAt  DateTime?
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+/// Audit trail for calls to the disabled redemption endpoint.
+///
+/// Exists so that if anyone ever asks "did redemption run after the cutover?",
+/// there is a table that answers no. Rows should be rare after old clients age out.
+model RedemptionAttempt {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  userAgent  String?
+  attemptedAt DateTime @default(now())
+
+  @@index([attemptedAt])
+}

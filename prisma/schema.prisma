@@ -48,11 +48,31 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  results      ChallengeResult[]
+  // --- compliance additions (2026-08) ------------------------------------
+  /// When the user confirmed they meet the minimum age. Null = never asked.
+  /// We store the confirmation, not a date of birth: a stored DOB is a
+  /// liability with no product use.
+  ageAttestedAt      DateTime?
+  ageAttestedMin     Int?
+
+  /// User has removed themselves from all public leaderboards.
+  leaderboardOptOut  Boolean   @default(false)
+
+  /// Soft delete. Identifiers are scrubbed at the same time.
+  /// EVERY public query must filter on `deletedAt: null`.
+  deletedAt          DateTime?
+
+  results             ChallengeResult[]
   createdContent      Content[]
-  transactions PPATransaction[]
-  pollVotes    PollVote[]
-  predictions  Prediction[]
+  transactions        PPATransaction[]
+  pollVotes           PollVote[]
+  predictions         Prediction[]
+  topUps              TopUp[]
+  redemptionAttempts  RedemptionAttempt[]
+
+  @@index([deletedAt, leaderboardOptOut])
+  @@index([totalPredictions])
+  @@index([reputationScore])
 }
 
 model Content {
@@ -165,6 +185,10 @@ model PPATransaction {
 
   @@index([userId, createdAt])
   @@index([userId, isSnapshot])
+  /// Note: the award gate reads the chain tail on every write with
+  /// ORDER BY createdAt DESC within a user. The existing [userId, createdAt]
+  /// btree already serves that (Postgres scans btrees backwards), so no
+  /// additional index is needed here.
 }
 
 // ---------------------------------------------------------------------------
@@ -188,8 +212,13 @@ model PPAApp {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  mandates     AgentMandate[]
-  transactions EcosystemTransaction[]
+  /// Maximum PPA this partner app may mint per UTC day. Null = platform default.
+  /// A leaked partner key can burn one day of one app's budget, and no more.
+  dailyEmissionCap Int?
+
+  mandates       AgentMandate[]
+  transactions   EcosystemTransaction[]
+  dailyEmissions AppDailyEmission[]
 }
 
 model EcosystemTransaction {
@@ -287,6 +316,96 @@ model UserSigningKey {
 
   @@index([piUserId])
   @@index([piUserId, revokedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Compliance: top-ups, emission control, audit  (added 2026-08)
+// ---------------------------------------------------------------------------
+
+enum TopUpStatus {
+  PENDING
+  APPROVED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+/// One row per Pi payment used to buy PPA.
+///
+/// `piPaymentId` is unique, and that uniqueness is the anti-double-credit
+/// mechanism: approve() upserts on it, creditTopUp() keys its idempotency on it.
+model TopUp {
+  id          String      @id @default(cuid())
+  piPaymentId String      @unique
+  piTxid      String?
+  userId      String
+  amountPi    Decimal     @db.Decimal(18, 8)
+  ppaAmount   Int
+  status      TopUpStatus @default(PENDING)
+  createdAt   DateTime    @default(now())
+  completedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+/// Per-user, per-source emission counter for one UTC day.
+///
+/// Read and incremented inside the award() transaction. The compound unique is
+/// what makes the upsert atomic under concurrency.
+model UserDailyEmission {
+  id       String   @id @default(cuid())
+  piUserId String
+  day      DateTime @db.Date
+  source   String
+  emitted  Int      @default(0)
+
+  @@unique([piUserId, day, source])
+  @@index([day])
+}
+
+/// Per-app, per-day emission counter. The partner budget.
+///
+/// Checked and reserved before a partner credit mints anything, so two
+/// concurrent calls from the same app can't both pass the ceiling.
+model AppDailyEmission {
+  id      String   @id @default(cuid())
+  appId   String
+  day     DateTime @db.Date
+  emitted Int      @default(0)
+
+  app PPAApp @relation(fields: [appId], references: [id])
+
+  @@unique([appId, day])
+  @@index([day])
+}
+
+
+/// Global emission counter for one UTC day. The circuit breaker.
+///
+/// If an exploit gets past the per-user caps, the platform stops minting for the
+/// day rather than inflating the supply overnight.
+model DailyEmission {
+  day       DateTime @id @db.Date
+  emitted   Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+/// Audit trail for calls to the disabled redemption endpoint.
+///
+/// Exists so that if anyone ever asks "did redemption run after the cutover?",
+/// there is a table that answers no.
+model RedemptionAttempt {
+  id          String   @id @default(cuid())
+  userId      String?
+  userAgent   String?
+  attemptedAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([attemptedAt])
 }
 
 // ---------------------------------------------------------------------------

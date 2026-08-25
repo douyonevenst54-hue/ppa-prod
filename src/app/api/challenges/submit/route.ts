@@ -1,133 +1,161 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+/**
+ * Challenge submission — scored on the SERVER.
+ *
+ * The client sends questionIds, the answers chosen, and elapsed time. It does
+ * not send a score, and it never sees correctAnswer before submitting. This is
+ * the fix for client-side scoring: with the old flow, anyone who opened devtools
+ * could post a perfect result and mint the maximum reward.
+ *
+ * Reward is paid through award(), so daily caps and the ledger apply
+ * automatically. The idempotency key is derived from the user and the question
+ * set, so a double-tapped Submit pays once.
+ *
+ * ADAPT: getSessionUser import path.
+ */
 
-function getStreakMultiplier(streakDays: number): number {
-  if (streakDays >= 30) return 2.0;
-  if (streakDays >= 14) return 1.8;
-  if (streakDays >= 7)  return 1.5;
-  if (streakDays >= 3)  return 1.2;
-  return 1.0;
+import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
+import { prisma } from '@/lib/prisma';
+import { getSessionUser } from '@/lib/auth';
+import { award } from '@/lib/ppa/award';
+import { computeChallengeReward } from '@/lib/ppa/rewards';
+
+export const dynamic = 'force-dynamic';
+
+const SECONDS_PER_QUESTION = 15;
+
+interface SubmittedAnswer {
+  questionId: string;
+  answer: string;
 }
-
-const TIER_MULTIPLIERS: Record<string, number> = {
-  NEWCOMER: 0.8,
-  MEMBER: 1.0,
-  TRUSTED: 1.2,
-  EXPERT: 1.5,
-  ELITE: 2.0,
-};
 
 export async function POST(req: NextRequest) {
-  try {
-    const {
-      userId,
-      challengeId,
-      correct,
-      total,
-      timeSeconds,
-      streakDays,
-      tier,
-    } = await req.json();
-
-    if (!userId) {
-      return NextResponse.json({ error: "userId required" }, { status: 400 });
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    // Calculate reward breakdown
-    const accuracy = correct / total;
-    const accuracySquared = Math.pow(accuracy, 2);
-    const maxTime = total * 15;
-    const speedRatio = Math.max(0, (maxTime - timeSeconds) / maxTime);
-    const streakMultiplier = getStreakMultiplier(streakDays || user.streakDays);
-    const tierMultiplier = TIER_MULTIPLIERS[tier || user.tier] || 1.0;
-    const base = 20;
-
-    const baseReward = Math.floor(base * accuracySquared);
-    const speedBonus = Math.floor(base * accuracySquared * speedRatio);
-    const streakBonus = Math.floor(
-      base * accuracySquared * (streakMultiplier - 1)
-    );
-    const tierBonus = Math.floor(
-      base * accuracySquared * (tierMultiplier - 1)
-    );
-    const ppaEarned = baseReward + speedBonus + streakBonus + tierBonus;
-
-    // Update user stats
-    const newTotalChallenges = (user.totalChallenges || 0) + total;
-const newCorrectChallenges = (user.correctChallenges || 0) + correct;
-const challengeAccuracy = newCorrectChallenges / newTotalChallenges;
-const predictionAccuracy = user.totalPredictions > 0
-  ? user.correctPredictions / user.totalPredictions
-  : 0;
-// Combined accuracy weighted by activity
-const totalActivity = newTotalChallenges + user.totalPredictions;
-const newAccuracyRate = totalActivity > 0
-  ? (newCorrectChallenges + user.correctPredictions) / totalActivity
-  : 0;
-
-    // Determine new tier
-   function getTier(predAccuracy: number, predTotal: number): string {
-  if (predTotal < 10) return "NEWCOMER";
-  if (predAccuracy >= 0.85 && predTotal >= 50) return "ELITE";
-  if (predAccuracy >= 0.75 && predTotal >= 30) return "EXPERT";
-  if (predAccuracy >= 0.65 && predTotal >= 20) return "TRUSTED";
-  if (predTotal >= 10) return "MEMBER";
-  return "NEWCOMER";
-}
-
-const newTier = getTier(predictionAccuracy, user.totalPredictions);
-    const newReputation = parseFloat(
-      (newAccuracyRate * 10 * streakMultiplier).toFixed(2)
-    );
-
-    await prisma.user.update({
-  where: { id: userId },
-  data: {
-    ppaBalance: { increment: ppaEarned },
-    totalChallenges: { increment: total },
-    correctChallenges: { increment: correct },
-    accuracyRate: newAccuracyRate,
-    reputationScore: newReputation,
-    tier: newTier as "NEWCOMER" | "MEMBER" | "TRUSTED" | "EXPERT" | "ELITE",
-    lastActiveDate: new Date(),
-  },
-});
-
-    // Log transaction
-    if (ppaEarned > 0) {
-      await prisma.pPATransaction.create({
-        data: {
-          userId,
-          amount: ppaEarned,
-          type: "earn",
-          source: `challenge_${challengeId || "unknown"}`,
-        },
-      });
-    }
-
-    return NextResponse.json({
-      ppaEarned,
-      baseReward,
-      speedBonus,
-      streakBonus,
-      tierBonus,
-      correct,
-      total,
-      newAccuracyRate,
-      newTier,
-      newReputation,
-    });
-
-  } catch (error) {
-    console.error("Submit error:", error);
-    return NextResponse.json(
-      { error: "Failed to submit results" },
-      { status: 500 }
-    );
+  const user = await getSessionUser(req);
+  if (!user) {
+    return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
   }
+
+  const body = (await req.json()) as {
+    answers?: SubmittedAnswer[];
+    secondsTaken?: number;
+  };
+
+  const answers = body.answers ?? [];
+  if (answers.length === 0 || answers.length > 20) {
+    return NextResponse.json({ error: 'invalid_submission' }, { status: 400 });
+  }
+
+  const secondsAllowed = answers.length * SECONDS_PER_QUESTION;
+  // Clamp rather than trust: a client claiming 0 seconds shouldn't max the bonus.
+  const secondsTaken = Math.min(
+    secondsAllowed,
+    Math.max(1, Math.round(body.secondsTaken ?? secondsAllowed)),
+  );
+
+  const questions = await prisma.question.findMany({
+    where: { id: { in: answers.map((a) => a.questionId) } },
+    select: { id: true, correctAnswer: true },
+  });
+
+  if (questions.length !== answers.length) {
+    return NextResponse.json({ error: 'unknown_question' }, { status: 400 });
+  }
+
+  const correctById = new Map(questions.map((q) => [q.id, q.correctAnswer]));
+
+  const graded = answers.map((a) => ({
+    questionId: a.questionId,
+    answer: a.answer,
+    isCorrect: correctById.get(a.questionId) === a.answer,
+  }));
+  const correct = graded.filter((g) => g.isCorrect).length;
+
+  const profile = await prisma.user.findUniqueOrThrow({
+    where: { id: user.id },
+    select: { streakDays: true, tier: true },
+  });
+
+  const breakdown = computeChallengeReward({
+    correct,
+    total: graded.length,
+    secondsTaken,
+    secondsAllowed,
+    streakDays: profile.streakDays,
+    tier: profile.tier,
+  });
+
+  // Deterministic key: same user, same question set, same day => one payout.
+  const setHash = createHash('sha256')
+    .update(
+      [user.id, new Date().toISOString().slice(0, 10), ...graded.map((g) => g.questionId).sort()].join('|'),
+    )
+    .digest('hex')
+    .slice(0, 32);
+  const idempotencyKey = `challenge:${setHash}`;
+
+  // Persist the attempt regardless of whether the award clears the cap — the
+  // player's record is the player's record, capped or not.
+  const perQuestionPpa = breakdown.total > 0 ? Math.floor(breakdown.total / graded.length) : 0;
+  await prisma.$transaction([
+    prisma.challengeResult.createMany({
+      data: graded.map((g) => ({
+        userId: user.id,
+        questionId: g.questionId,
+        isCorrect: g.isCorrect,
+        timeSeconds: Math.round(secondsTaken / graded.length),
+        ppaEarned: g.isCorrect ? perQuestionPpa : 0,
+      })),
+      skipDuplicates: true,
+    }),
+    prisma.user.update({
+      where: { id: user.id },
+      data: {
+        totalChallenges: { increment: graded.length },
+        correctChallenges: { increment: correct },
+        lastActiveDate: new Date(),
+      },
+    }),
+    ...graded.map((g) =>
+      prisma.question.update({
+        where: { id: g.questionId },
+        data: {
+          timesServed: { increment: 1 },
+          timesCorrect: { increment: g.isCorrect ? 1 : 0 },
+        },
+      }),
+    ),
+  ]);
+
+  const result =
+    breakdown.total > 0
+      ? await award({
+          piUserId: user.piUserId,
+          amount: breakdown.total,
+          source: 'CHALLENGE',
+          idempotencyKey,
+          allowPartial: true,
+        })
+      : { ok: true, applied: 0, balance: 0, replay: false as const };
+
+  const balance =
+    result.balance ||
+    (await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { ppaBalance: true },
+    })).ppaBalance;
+
+  return NextResponse.json({
+    correct,
+    total: graded.length,
+    secondsTaken,
+    breakdown: breakdown.lines,
+    earned: result.applied,
+    balance,
+    // Surfaced so the results card can explain a short payout instead of
+    // silently showing a number that doesn't match the breakdown.
+    capped: result.applied < breakdown.total,
+    cappedReason: result.reason ?? null,
+    // Which answers were right, revealed only now that scoring is done.
+    graded: graded.map((g) => ({ questionId: g.questionId, isCorrect: g.isCorrect })),
+  });
 }
