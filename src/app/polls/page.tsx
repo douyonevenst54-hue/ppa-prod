@@ -1,5 +1,25 @@
 "use client";
 
+/**
+ * Polls listing.
+ *
+ * ── TWO CHANGES ───────────────────────────────────────────────────────────
+ *
+ * 1. The subtitle no longer promises PPA for voting.
+ *
+ *    "Vote. Influence. Earn PPA." described a mechanic that was the cheapest
+ *    farm in the app — create a poll, vote on it, get paid, repeat — and it is
+ *    gone from the server. Leaving the promise on screen would be advertising
+ *    a reward the app won't pay.
+ *
+ * 2. The empty state is a way out, not a dead end.
+ *
+ *    "No polls found / Try a different search or category" on a primary nav tab
+ *    told a user to retry a search that couldn't succeed, because there were no
+ *    polls at all. It now distinguishes "your filters matched nothing" from
+ *    "nobody has written one yet", and the second case offers to fix itself.
+ */
+
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
@@ -77,6 +97,15 @@ export default function PollsPage() {
     fetchPolls();
   }, [fetchPolls]);
 
+  const hasFilters = debouncedSearch !== "" || category !== "ALL";
+
+  const clearFilters = () => {
+    setSearch("");
+    setDebouncedSearch("");
+    setCategory("ALL");
+    setSort("popular");
+  };
+
   return (
     <div style={{ padding: "0 0 80px 0" }}>
 
@@ -89,7 +118,10 @@ export default function PollsPage() {
         <Link href="/" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 20 }}>←</Link>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>🗳️ Polls</div>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Vote. Influence. Earn PPA.</div>
+          {/* Was "Vote. Influence. Earn PPA." — voting doesn't pay any more. */}
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            Vote. Influence. See where the community lands.
+          </div>
         </div>
       </div>
 
@@ -164,10 +196,11 @@ export default function PollsPage() {
           ))}
         </div>
 
-        {/* Results count */}
-        {!loading && (
+        {/* Results count — hidden when there are none, since the empty state
+            below says it better than "0 polls found" does. */}
+        {!loading && polls.length > 0 && (
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
-            {polls.length} poll{polls.length !== 1 ? "s" : ""} found
+            {polls.length} poll{polls.length !== 1 ? "s" : ""}
             {debouncedSearch && ` for "${debouncedSearch}"`}
           </div>
         )}
@@ -178,11 +211,48 @@ export default function PollsPage() {
             Loading...
           </div>
         ) : polls.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)" }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No polls found</div>
-            <div style={{ fontSize: 13 }}>Try a different search or category</div>
-          </div>
+          hasFilters ? (
+            /* Filters matched nothing — the retry advice is actually useful here. */
+            <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: "var(--text-primary)" }}>
+                No polls match those filters
+              </div>
+              <button
+                onClick={clearFilters}
+                style={{
+                  marginTop: 8,
+                  padding: "10px 20px",
+                  borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "var(--text-secondary)",
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : (
+            /* Nothing exists yet. Telling someone to "try a different search"
+               when there are zero polls is a dead end; offer the fix instead. */
+            <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>🗳️</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: "var(--text-primary)" }}>
+                No polls running right now
+              </div>
+              <div style={{ fontSize: 13, lineHeight: 1.5, maxWidth: 260, margin: "0 auto 20px" }}>
+                Polls are written by players. Ask a question and see how the
+                community splits.
+              </div>
+              <Link href="/creator/new/poll" style={{ textDecoration: "none" }}>
+                <button className="btn-primary" style={{ maxWidth: 220, margin: "0 auto" }}>
+                  Write the first poll
+                </button>
+              </Link>
+            </div>
+          )
         ) : (
           polls.map((poll) => (
             <div key={poll.id} className="card" style={{ marginBottom: 12 }}>

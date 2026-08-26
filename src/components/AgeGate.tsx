@@ -1,77 +1,130 @@
-'use client';
+"use client";
 
 /**
- * Age gate, shown once after first Pi authentication.
+ * Age gate, shown once after Pi authentication.
  *
- * Deliberately not dismissible and deliberately not a date picker: we need to be
- * able to show the user was asked and answered, and storing a date of birth
- * creates a liability with no product use. Declining signs the user out.
+ * Not dismissible, and deliberately not a date picker: what needs to exist is a
+ * record that the user was asked and answered. Storing a date of birth creates
+ * a data-protection liability with no product use.
  *
- * ADAPT: signOut() to match your auth helper.
+ * Declining signs the user out rather than degrading into a limited mode —
+ * a half-open door for someone who said they're under 18 is worse than a
+ * closed one.
  */
 
-import { useState } from 'react';
-import { MIN_AGE_YEARS } from '@/lib/ppa/policy';
+import { useEffect, useState } from "react";
+import { useAuth } from "./AuthProvider";
+import { apiFetch } from "@/lib/pi-session";
 
-export default function AgeGate({
-  onConfirmed,
-  onDeclined,
-}: {
-  onConfirmed: () => void;
-  onDeclined: () => void;
-}) {
+export default function AgeGate() {
+  const { user, signOut } = useAuth();
+  const [needsGate, setNeedsGate] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
-  async function confirm() {
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+
+    apiFetch("/api/account/attest-age")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setNeedsGate(d.attested === false);
+      })
+      .catch(() => {
+        // Can't reach it — don't block the app on a network hiccup.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  if (!needsGate) return null;
+
+  const confirm = async () => {
     setBusy(true);
-    setError('');
-    const res = await fetch('/api/account/attest-age', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ confirmed: true }),
-    });
-    setBusy(false);
-    if (res.ok) onConfirmed();
-    else setError('That didn\u2019t save. Check your connection and try again.');
-  }
+    setError("");
+    try {
+      const res = await apiFetch("/api/account/attest-age", {
+        method: "POST",
+        body: JSON.stringify({ confirmed: true }),
+      });
+      if (!res.ok) throw new Error();
+      setNeedsGate(false);
+    } catch {
+      setError("That didn't save. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="age-gate-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-4 sm:items-center"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(0,0,0,0.85)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
     >
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12121C] p-6">
-        <h2 id="age-gate-title" className="text-lg font-semibold text-white">
+      <div
+        className="card"
+        style={{ maxWidth: 360, width: "100%", padding: 24 }}
+      >
+        <div id="age-gate-title" style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
           Confirm your age
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-slate-400">
-          PPA is for people {MIN_AGE_YEARS} and over. Confirm your age to continue.
-        </p>
-
-        <button
-          type="button"
-          onClick={confirm}
-          disabled={busy}
-          className="mt-5 w-full rounded-xl bg-indigo-500 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-300 disabled:opacity-60"
+        </div>
+        <div
+          style={{
+            fontSize: 14,
+            lineHeight: 1.6,
+            color: "var(--text-secondary)",
+            marginBottom: 20,
+          }}
         >
-          {busy ? 'Saving\u2026' : `I am ${MIN_AGE_YEARS} or older`}
+          PPA is for people 18 and over. Confirm your age to continue.
+        </div>
+
+        <button className="btn-primary" onClick={confirm} disabled={busy}>
+          {busy ? "Saving..." : "I am 18 or older"}
         </button>
 
         <button
-          type="button"
-          onClick={onDeclined}
-          className="mt-2 w-full rounded-xl px-4 py-3 text-sm text-slate-400 transition hover:text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500"
+          onClick={() => signOut()}
+          style={{
+            width: "100%",
+            marginTop: 8,
+            padding: "10px 16px",
+            borderRadius: 10,
+            border: "none",
+            background: "transparent",
+            color: "var(--text-secondary)",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
         >
-          I am under {MIN_AGE_YEARS}
+          I am under 18
         </button>
 
         {error && (
-          <p role="alert" className="mt-3 text-sm text-rose-300">
+          <div
+            style={{
+              marginTop: 12,
+              fontSize: 13,
+              color: "var(--accent-secondary)",
+              textAlign: "center",
+            }}
+          >
             {error}
-          </p>
+          </div>
         )}
       </div>
     </div>

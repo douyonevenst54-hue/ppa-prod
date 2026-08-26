@@ -1,32 +1,40 @@
+"use client";
+
 /**
- * /topup — replaces /exchange.
+ * /topup — replaces /wallet/exchange.
  *
- * Add a redirect for the old path in next.config.js:
- *   { source: '/exchange', destination: '/topup', permanent: false }
- *
- * ADAPT: getSessionUser + your layout wrapper.
+ * Add redirects in next.config.js:
+ *   { source: '/exchange',        destination: '/topup', permanent: false },
+ *   { source: '/wallet/exchange', destination: '/topup', permanent: false },
  */
 
-'use client';
-
-import { useEffect, useState } from 'react';
-import TopUpPanel from '@/components/TopUpPanel';
-import LegalFooter from '@/components/LegalFooter';
+import Link from "next/link";
+import TopUpPanel from "@/components/TopUpPanel";
 
 export default function TopUpPage() {
-  const [balance, setBalance] = useState(0);
-
-  useEffect(() => {
-    fetch('/api/me')
-      .then((r) => r.json())
-      .then((d) => setBalance(d.ppaBalance ?? 0))
-      .catch(() => setBalance(0));
-  }, []);
-
   return (
-    <main className="min-h-dvh bg-[#0A0A11]">
-      <TopUpPanel balance={balance} onBalanceChange={setBalance} />
-      <LegalFooter />
-    </main>
+    <div style={{ padding: "0 0 80px 0" }}>
+      <div
+        style={{
+          padding: "20px 16px 12px",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <Link href="/wallet" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 20 }}>
+          ←
+        </Link>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>⚡ Top up PPA</div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            Add credit to play challenges and publish content.
+          </div>
+        </div>
+      </div>
+
+      <TopUpPanel />
+    </div>
   );
 }

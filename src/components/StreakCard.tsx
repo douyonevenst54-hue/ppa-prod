@@ -1,7 +1,20 @@
 "use client";
 
+/**
+ * Daily streak card.
+ *
+ * Changes:
+ *  - apiFetch, and no `?userId=` — the route returns the session user now.
+ *  - The check-in reply can report a capped payout; saying so beats silently
+ *    paying less than the message promised.
+ *  - Milestone progress is measured against the actual ladder (3/7/14/30)
+ *    rather than `% 7`, which claimed "7 days to next upgrade" to someone on a
+ *    28-day streak whose next milestone was 2 days away.
+ */
+
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthProvider";
+import { apiFetch } from "@/lib/pi-session";
 
 interface StreakData {
   streakDays: number;
@@ -10,6 +23,13 @@ interface StreakData {
   streakStatus: "active" | "at_risk" | "broken";
   checkedInToday: boolean;
 }
+
+const MILESTONES = [
+  { days: 3, label: "3d", mult: "1.2×" },
+  { days: 7, label: "7d", mult: "1.5×" },
+  { days: 14, label: "14d", mult: "1.8×" },
+  { days: 30, label: "30d", mult: "2×" },
+];
 
 const MULTIPLIER_LABELS: Record<number, string> = {
   1.0: "No bonus",
@@ -25,42 +45,56 @@ const STATUS_COLORS = {
   broken: "#ff6584",
 };
 
+/** Days remaining to the next milestone, and how far through we are. */
+function milestoneProgress(days: number): { next: number | null; pct: number } {
+  const prev = [0, ...MILESTONES.map((m) => m.days)].filter((d) => d <= days).pop() ?? 0;
+  const next = MILESTONES.find((m) => m.days > days)?.days ?? null;
+  if (next === null) return { next: null, pct: 100 };
+  return { next: next - days, pct: ((days - prev) / (next - prev)) * 100 };
+}
+
 export default function StreakCard() {
-  const { user, refreshUser } = useAuth();
+  const { refreshUser } = useAuth();
   const [streak, setStreak] = useState<StreakData | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
   const [message, setMessage] = useState("");
 
   const fetchStreak = useCallback(async () => {
-    if (!user?.id) return;
     try {
-      const res = await fetch(`/api/streak?userId=${user.id}`);
-      const data = await res.json();
-      setStreak(data);
-    } catch (err) {
-      console.error("Failed to fetch streak:", err);
+      const res = await apiFetch("/api/streak");
+      if (res.ok) setStreak(await res.json());
+    } catch {
+      // Signed out or offline; the card just shows its empty state.
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, []);
 
   useEffect(() => {
-    fetchStreak();
+    void fetchStreak();
   }, [fetchStreak]);
 
   const handleCheckIn = async () => {
-    if (!user?.id || claiming) return;
+    if (claiming) return;
     setClaiming(true);
-
     try {
-      const res = await fetch("/api/streak", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
-      });
+      const res = await apiFetch("/api/streak", { method: "POST" });
       const data = await res.json();
-      setMessage(data.message);
+
+      if (!res.ok) {
+        setMessage(data.message ?? "Couldn't check in.");
+        return;
+      }
+
+      setMessage(
+        data.capped
+          ? `${data.message} You've hit today's earning limit, so this paid ${data.ppaBonus} PPA.`
+          : data.ppaBonus > 0
+            ? `${data.message} +${data.ppaBonus} PPA`
+            : data.message,
+      );
+
       setStreak({
         streakDays: data.streakDays,
         longestStreak: data.longestStreak,
@@ -68,11 +102,10 @@ export default function StreakCard() {
         streakStatus: "active",
         checkedInToday: true,
       });
-      if (data.ppaBonus > 0) {
-        await refreshUser();
-      }
+
+      if (data.ppaBonus > 0) await refreshUser();
     } catch {
-      setMessage("❌ Failed to check in");
+      setMessage("Couldn't check in. Try again.");
     } finally {
       setClaiming(false);
     }
@@ -80,7 +113,7 @@ export default function StreakCard() {
 
   if (loading) {
     return (
-      <div className="card" style={{ marginBottom: 12, padding: "16px" }}>
+      <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
           Loading streak...
         </div>
@@ -88,138 +121,133 @@ export default function StreakCard() {
     );
   }
 
-  const statusColor = STATUS_COLORS[streak?.streakStatus || "broken"];
-  const checkedIn = streak?.checkedInToday || false;
+  const days = streak?.streakDays ?? 0;
+  const statusColor = STATUS_COLORS[streak?.streakStatus ?? "broken"];
+  const checkedIn = streak?.checkedInToday ?? false;
+  const progress = milestoneProgress(days);
 
   return (
-    <div className="card" style={{
-      marginBottom: 12,
-      background: "linear-gradient(135deg, #1a1a2e, #16213e)",
-      border: `1px solid ${statusColor}44`,
-    }}>
-
-      {/* Top Row */}
+    <div
+      className="card"
+      style={{
+        marginBottom: 12,
+        background: "linear-gradient(135deg, #1a1a2e, #16213e)",
+        border: `1px solid ${statusColor}44`,
+      }}
+    >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
         <div>
           <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>
             Daily Streak
           </div>
-          <div style={{ fontSize: 28, fontWeight: 800 }}>
-            🔥 {streak?.streakDays || 0} Days
-          </div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>🔥 {days} Days</div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: statusColor,
-            marginBottom: 4,
-          }}>
-            {streak?.streakStatus === "active" && checkedIn && "✅ Checked in"}
-            {streak?.streakStatus === "at_risk" && "⚠️ At risk!"}
-            {streak?.streakStatus === "broken" && "💔 Start streak"}
-            {streak?.streakStatus === "active" && !checkedIn && "🔥 Active"}
+          <div style={{ fontSize: 11, fontWeight: 600, color: statusColor, marginBottom: 4 }}>
+            {checkedIn && "✅ Checked in"}
+            {!checkedIn && streak?.streakStatus === "at_risk" && "⚠️ At risk"}
+            {!checkedIn && streak?.streakStatus === "broken" && "Start a streak"}
+            {!checkedIn && streak?.streakStatus === "active" && "🔥 Active"}
           </div>
-          <div style={{
-            padding: "4px 10px",
-            borderRadius: 20,
-            background: statusColor + "22",
-            color: statusColor,
-            fontSize: 12,
-            fontWeight: 600,
-          }}>
-            {MULTIPLIER_LABELS[streak?.multiplier || 1.0]}
+          <div
+            style={{
+              padding: "4px 10px",
+              borderRadius: 20,
+              background: statusColor + "22",
+              color: statusColor,
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            {MULTIPLIER_LABELS[streak?.multiplier ?? 1.0]}
           </div>
         </div>
       </div>
 
-      {/* Streak Progress */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>
           <span>Progress to next milestone</span>
-          <span>Best: {streak?.longestStreak || 0} days</span>
+          <span>Best: {streak?.longestStreak ?? 0} days</span>
         </div>
         <div style={{ height: 6, background: "var(--border)", borderRadius: 3 }}>
-          <div style={{
-            height: "100%",
-            width: `${Math.min(((streak?.streakDays || 0) % 7) / 7 * 100, 100)}%`,
-            background: statusColor,
-            borderRadius: 3,
-            transition: "width 0.5s ease",
-          }} />
+          <div
+            style={{
+              height: "100%",
+              width: `${Math.min(progress.pct, 100)}%`,
+              background: statusColor,
+              borderRadius: 3,
+              transition: "width 0.5s ease",
+            }}
+          />
         </div>
         <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
-          {7 - ((streak?.streakDays || 0) % 7)} days to next multiplier upgrade
+          {progress.next === null
+            ? "Top multiplier reached"
+            : `${progress.next} day${progress.next === 1 ? "" : "s"} to the next multiplier`}
         </div>
       </div>
 
-      {/* Milestone badges */}
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-        {[
-          { days: 3, label: "3d", mult: "1.2×" },
-          { days: 7, label: "7d", mult: "1.5×" },
-          { days: 14, label: "14d", mult: "1.8×" },
-          { days: 30, label: "30d", mult: "2×" },
-        ].map((milestone) => {
-          const reached = (streak?.streakDays || 0) >= milestone.days;
+        {MILESTONES.map((m) => {
+          const reached = days >= m.days;
           return (
-            <div key={milestone.days} style={{
-              flex: 1,
-              padding: "6px 4px",
-              borderRadius: 8,
-              textAlign: "center",
-              background: reached ? "#00c9a722" : "var(--bg-secondary)",
-              border: `1px solid ${reached ? "#00c9a7" : "var(--border)"}`,
-            }}>
+            <div
+              key={m.days}
+              style={{
+                flex: 1,
+                padding: "6px 4px",
+                borderRadius: 8,
+                textAlign: "center",
+                background: reached ? "#00c9a722" : "var(--bg-secondary)",
+                border: `1px solid ${reached ? "#00c9a7" : "var(--border)"}`,
+              }}
+            >
               <div style={{ fontSize: 11, fontWeight: 700, color: reached ? "#00c9a7" : "var(--text-secondary)" }}>
-                {milestone.label}
+                {m.label}
               </div>
               <div style={{ fontSize: 10, color: reached ? "#00c9a7" : "var(--text-secondary)" }}>
-                {milestone.mult}
+                {m.mult}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Message */}
       {message && (
-        <div style={{
-          fontSize: 13,
-          fontWeight: 600,
-          color: message.startsWith("✅") || message.includes("streak") ? "#00c9a7" : "var(--accent-gold)",
-          marginBottom: 10,
-          textAlign: "center",
-        }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#00c9a7",
+            marginBottom: 10,
+            textAlign: "center",
+            lineHeight: 1.5,
+          }}
+        >
           {message}
         </div>
       )}
 
-      {/* CTA */}
       {!checkedIn ? (
-        <button
-          className="btn-primary"
-          onClick={handleCheckIn}
-          disabled={claiming}
-          style={{ opacity: claiming ? 0.6 : 1 }}
-        >
-          {claiming ? "Checking in..." : "✅ Complete Today's Challenge"}
+        <button className="btn-primary" onClick={handleCheckIn} disabled={claiming} style={{ opacity: claiming ? 0.6 : 1 }}>
+          {claiming ? "Checking in..." : "Check in for today"}
         </button>
       ) : (
-        <div style={{
-          textAlign: "center",
-          padding: "10px",
-          borderRadius: 12,
-          background: "#00c9a722",
-          border: "1px solid #00c9a744",
-          fontSize: 13,
-          color: "#00c9a7",
-          fontWeight: 600,
-        }}>
-          ✅ Come back tomorrow to keep your streak!
+        <div
+          style={{
+            textAlign: "center",
+            padding: 10,
+            borderRadius: 12,
+            background: "#00c9a722",
+            border: "1px solid #00c9a744",
+            fontSize: 13,
+            color: "#00c9a7",
+            fontWeight: 600,
+          }}
+        >
+          Come back tomorrow to keep your streak
         </div>
       )}
-
     </div>
   );
 }

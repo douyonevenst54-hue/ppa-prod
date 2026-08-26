@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/components/AuthProvider";
 import Link from "next/link";
+import PrivacySection from "./PrivacySection";
 
 const TIER_COLORS: Record<string, string> = {
   NEWCOMER: "#a0a0b8",
@@ -315,22 +316,8 @@ export default function ProfilePage() {
           ACCOUNT
         </div>
 
-        <div className="card" style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-            🔐 Re-authorize Pi access
-          </div>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.5 }}>
-            Required once after adding the Wallet Address permission. Tap this to
-            grant Pi the new permission needed for redemption.
-          </div>
-          <button
-            className="btn-primary"
-            onClick={() => { void forceReauth(); }}
-            style={{ width: "100%", fontSize: 14 }}
-          >
-            Re-authorize with Pi
-          </button>
-        </div>
+         import PrivacySection from "./PrivacySection";
+
 
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>

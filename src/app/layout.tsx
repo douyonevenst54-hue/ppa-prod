@@ -3,6 +3,8 @@ import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import { AuthProvider } from "@/components/AuthProvider";
 import PiBrowserBanner from "@/components/PiBrowserBanner";
+import LegalFooter from "@/components/LegalFooter";
+import AgeGate from "@/components/AgeGate";
 
 export const metadata: Metadata = {
   title: "Pap-Pad-App",
@@ -23,8 +25,13 @@ export default function RootLayout({
         <AuthProvider>
           <PiBrowserBanner>
             {children}
+            {/* Terms, privacy and support on every page. Previously there was no
+                route to any of them anywhere in the app. */}
+            <LegalFooter />
             <BottomNav />
           </PiBrowserBanner>
+          {/* Renders only when the signed-in user has no age attestation. */}
+          <AgeGate />
         </AuthProvider>
       </body>
     </html>
