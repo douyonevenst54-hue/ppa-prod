@@ -1,9 +1,36 @@
 "use client";
 
+/**
+ * Make a prediction.
+ *
+ * ── STAKES REMOVED ────────────────────────────────────────────────────────
+ *
+ * The stake selector is gone: entry is free, nothing is debited, and a wrong
+ * call costs no PPA. The server rejects any request that still carries a
+ * stakeAmount, so this screen and the API agree.
+ *
+ * ── WHY CONFIDENCE SURVIVED ───────────────────────────────────────────────
+ *
+ * Deleting the stake and leaving "Low 1.2x / Medium 1.8x / High 3.0x" would
+ * have broken the game: with nothing at risk, High pays most and costs nothing,
+ * so it stops being a choice. Confidence now stakes REPUTATION instead — a
+ * confident correct call moves your standing up sharply, a confident miss moves
+ * it down. Same decision, nothing of value on the table.
+ *
+ * The PPA shown is what the server will actually pay: computePredictionReward
+ * is the same function resolution uses, fed this user's real streak and tier.
+ */
+
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
+import { apiFetch, NotSignedInError } from "@/lib/pi-session";
+import {
+  computePredictionReward,
+  confidenceWeight,
+  CONFIDENCE_LABELS,
+} from "@/lib/ppa/rewards";
 
 interface Prediction {
   id: string;
@@ -14,9 +41,11 @@ interface Prediction {
   pollOptions: { id: string; text: string }[];
 }
 
-const CONFIDENCE_LABELS = ["", "Low", "Medium", "High"];
-const CONFIDENCE_COLORS = ["", "#a0a0b8", "#ffd700", "#00c9a7"];
-const CONFIDENCE_MULTIPLIERS = ["", "1.2×", "1.8×", "3.0×"];
+const CONFIDENCE_COLORS: Record<number, string> = {
+  1: "#a0a0b8",
+  2: "#ffd700",
+  3: "#00c9a7",
+};
 
 const CATEGORY_COLORS: Record<string, string> = {
   FINANCE: "#00c9a7",
@@ -55,51 +84,55 @@ export default function PredictionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [confidence, setConfidence] = useState(2);
-  const [stake, setStake] = useState(10);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     fetch(`/api/predictions/${predictionId}`)
-      .then(r => r.json())
-      .then(data => {
+      .then((r) => r.json())
+      .then((data) => {
         if (data.prediction) setPrediction(data.prediction);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [predictionId]);
 
-  const potentialReward = Math.floor(
-    stake * parseFloat(CONFIDENCE_MULTIPLIERS[confidence])
-  );
+  const hoursBeforeClose = prediction
+    ? Math.max(0, (new Date(prediction.endsAt).getTime() - Date.now()) / 3_600_000)
+    : 0;
+
+  // The same function the server uses at resolution, so the number shown here
+  // is the number that gets paid — not an optimistic guess.
+  const reward = computePredictionReward({
+    isCorrect: true,
+    hoursBeforeClose,
+    streakDays: user?.streakDays ?? 0,
+    tier: user?.tier ?? "NEWCOMER",
+  });
+
+  const repGain = confidenceWeight(confidence);
+  const repLoss = repGain * 0.5;
 
   const handleSubmit = async () => {
-    if (!selectedAnswer || !user?.id) return;
-    if (user.ppaBalance < stake) {
-      setError("Insufficient PPA balance");
-      return;
-    }
+    if (!selectedAnswer) return;
 
     setSubmitting(true);
     setError("");
 
     try {
-      const res = await fetch("/api/predictions/submit", {
+      const res = await apiFetch("/api/predictions/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: user.id,
           contentId: predictionId,
           answer: selectedAnswer,
           confidenceLevel: confidence,
-          stakeAmount: stake,
         }),
       });
 
       const data = await res.json();
 
-      if (data.error) {
-        setError(data.error);
+      if (!res.ok) {
+        setError(data.message ?? data.error ?? "Couldn't submit your call.");
         setSubmitting(false);
         return;
       }
@@ -109,13 +142,16 @@ export default function PredictionDetailPage() {
       const confirmParams = new URLSearchParams({
         answer: selectedAnswer,
         confidence: String(confidence),
-        stake: String(stake),
-        reward: String(data.potentialReward || potentialReward),
+        reward: String(reward.total),
       });
 
-      router.push(`/predictions/${predictionId}/confirm?${confirmParams.toString()}`);
-    } catch {
-      setError("Failed to submit prediction. Try again.");
+      router.push(`/predictions/${predictionId}/confirm?${confirmParams}`);
+    } catch (err) {
+      setError(
+        err instanceof NotSignedInError
+          ? "Open PPA in Pi Browser and sign in to make a call."
+          : "Failed to submit. Try again.",
+      );
       setSubmitting(false);
     }
   };
@@ -161,11 +197,11 @@ export default function PredictionDetailPage() {
 
       <div style={{ padding: 16 }}>
 
-        {/* Question Card */}
+        {/* Question */}
         <div className="card" style={{ marginBottom: 16 }}>
           <span className="badge" style={{
             background: color + "22",
-            color: color,
+            color,
             marginBottom: 10,
             display: "inline-flex",
           }}>
@@ -186,28 +222,27 @@ export default function PredictionDetailPage() {
           </div>
         </div>
 
-        {/* Balance */}
-        {user && (
-          <div style={{
-            fontSize: 12,
-            color: "var(--text-secondary)",
-            marginBottom: 12,
-            textAlign: "right",
-          }}>
-            Balance:{" "}
-            <span style={{ color: "var(--accent-gold)", fontWeight: 600 }}>
-              {user.ppaBalance} PPA
-            </span>
-          </div>
-        )}
+        {/* Free-to-enter notice. Stated once, plainly, where the decision is made. */}
+        <div style={{
+          marginBottom: 16,
+          padding: "10px 14px",
+          borderRadius: 10,
+          background: "#00c9a711",
+          border: "1px solid #00c9a733",
+          fontSize: 13,
+          color: "#00c9a7",
+          textAlign: "center",
+        }}>
+          Free to enter · nothing at stake · a wrong call costs no PPA
+        </div>
 
-        {/* Answer Selection */}
+        {/* Answer */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 10, fontWeight: 600, letterSpacing: 1 }}>
             YOUR ANSWER
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {(prediction?.pollOptions ?? []).map((option) => (
+            {(prediction.pollOptions ?? []).map((option) => (
               <button
                 key={option.id}
                 onClick={() => setSelectedAnswer(option.text)}
@@ -230,10 +265,10 @@ export default function PredictionDetailPage() {
           </div>
         </div>
 
-        {/* Confidence Level */}
+        {/* Confidence — now a reputation decision */}
         <div className="card" style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
-            CONFIDENCE LEVEL
+            HOW SURE ARE YOU?
           </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             {[1, 2, 3].map((level) => (
@@ -255,67 +290,24 @@ export default function PredictionDetailPage() {
                 }}
               >
                 <div>{CONFIDENCE_LABELS[level]}</div>
-                <div style={{ fontSize: 11, marginTop: 2 }}>{CONFIDENCE_MULTIPLIERS[level]}</div>
+                <div style={{ fontSize: 11, marginTop: 2 }}>
+                  ±{confidenceWeight(level)} rep
+                </div>
               </button>
             ))}
           </div>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", textAlign: "center" }}>
-            Higher confidence = higher reward, higher risk
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", textAlign: "center", lineHeight: 1.5 }}>
+            Confident calls move your reputation further — in both directions.
+            <br />
+            Right: <span style={{ color: "#00c9a7" }}>+{repGain}</span>
+            {"  ·  "}
+            Wrong: <span style={{ color: "#ff6584" }}>−{repLoss}</span>
+            {"  ·  "}
+            PPA reward is the same either way.
           </div>
         </div>
 
-        {/* Stake Input */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
-            STAKE AMOUNT
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-            <button
-              onClick={() => setStake(Math.max(5, stake - 5))}
-              style={{
-                width: 40, height: 40, borderRadius: "50%",
-                border: "1px solid var(--border)",
-                background: "var(--bg-secondary)",
-                color: "white", fontSize: 20, cursor: "pointer",
-              }}
-            >−</button>
-            <div style={{ flex: 1, textAlign: "center" }}>
-              <span style={{ fontSize: 28, fontWeight: 700, color: "var(--accent-gold)" }}>
-                {stake}
-              </span>
-              <span style={{ fontSize: 14, color: "var(--text-secondary)", marginLeft: 6 }}>PPA</span>
-            </div>
-            <button
-              onClick={() => setStake(Math.min(500, stake + 5))}
-              style={{
-                width: 40, height: 40, borderRadius: "50%",
-                border: "1px solid var(--border)",
-                background: "var(--bg-secondary)",
-                color: "white", fontSize: 20, cursor: "pointer",
-              }}
-            >+</button>
-          </div>
-
-          <div style={{ display: "flex", gap: 8 }}>
-            {[10, 25, 50, 100].map((amount) => (
-              <button
-                key={amount}
-                onClick={() => setStake(amount)}
-                style={{
-                  flex: 1, padding: "6px 4px", borderRadius: 8,
-                  border: `1px solid ${stake === amount ? "var(--accent-primary)" : "var(--border)"}`,
-                  background: stake === amount ? "#6c63ff22" : "var(--bg-secondary)",
-                  color: stake === amount ? "var(--accent-primary)" : "var(--text-secondary)",
-                  fontSize: 12, cursor: "pointer",
-                }}
-              >
-                {amount}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Potential Reward */}
+        {/* Reward */}
         <div className="card" style={{
           marginBottom: 16,
           background: "linear-gradient(135deg, #1a1a2e, #16213e)",
@@ -324,28 +316,31 @@ export default function PredictionDetailPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
-                If correct at {CONFIDENCE_LABELS[confidence]} confidence
+                If you call it right
               </div>
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--accent-gold)" }}>
-                +{potentialReward} PPA
+                +{reward.total} PPA
               </div>
+              {hoursBeforeClose >= 24 && (
+                <div style={{ fontSize: 11, color: "#00c9a7", marginTop: 4 }}>
+                  includes an early-call bonus
+                </div>
+              )}
             </div>
             <div style={{ fontSize: 36 }}>🎯</div>
           </div>
         </div>
 
-        {/* Error */}
         {error && (
           <div style={{
             marginBottom: 12, padding: 12, borderRadius: 10,
             background: "#ff658422", border: "1px solid #ff658444",
             fontSize: 13, color: "#ff6584", textAlign: "center",
           }}>
-            ❌ {error}
+            {error}
           </div>
         )}
 
-        {/* Submit */}
         <button
           className="btn-primary"
           onClick={handleSubmit}

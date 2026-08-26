@@ -55,7 +55,11 @@ export type LedgerEntryType =
   | "exchange"
   | "snapshot"
   | "mandate"
-  | "topup";
+  | "topup"
+  | "adjust"
+  /// A correction appended when a balance was changed outside the ledger.
+  /// Never used by normal write paths — only by scripts/reconcile-drift.ts.
+  | "adjust";
 
 export type LedgerClient = PrismaClient | Prisma.TransactionClient;
 

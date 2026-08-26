@@ -33,13 +33,19 @@
  *  6. accuracyRate is updated in one SQL statement from the counter columns,
  *     rather than read-modify-write per user. This route is the only writer of
  *     that field, and the old version could drift under concurrent resolves.
+ *
+ *  7. reputationScore is finally written. It existed in the schema with no
+ *     writer anywhere, which is why the Players leaderboard showed numbers
+ *     nobody could explain. Confidence now moves it: a confident correct call
+ *     earns 4, a confident miss costs 2. That is what replaces the stake — the
+ *     user risks their standing, not their PPA.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { award } from "@/lib/ppa/award";
-import { computePredictionReward } from "@/lib/ppa/rewards";
+import { computePredictionReward, reputationDelta } from "@/lib/ppa/rewards";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -135,13 +141,17 @@ export async function POST(req: NextRequest) {
       (content.endsAt.getTime() - prediction.createdAt.getTime()) / 3_600_000,
     );
 
+    // Confidence deliberately absent: it moves reputation, not PPA. Paying
+    // more for High confidence with nothing at stake would make High strictly
+    // better than Low, and the selector would stop being a choice.
     const reward = computePredictionReward({
       isCorrect,
-      confidenceLevel: prediction.confidenceLevel,
       hoursBeforeClose,
       streakDays: prediction.user.streakDays,
       tier: prediction.user.tier,
     });
+
+    const repDelta = reputationDelta(isCorrect, prediction.confidenceLevel);
 
     let paid = 0;
 
@@ -175,7 +185,8 @@ export async function POST(req: NextRequest) {
       SET "totalPredictions"   = "totalPredictions" + 1,
           "correctPredictions" = "correctPredictions" + ${isCorrect ? 1 : 0},
           "accuracyRate"       = ("correctPredictions" + ${isCorrect ? 1 : 0})::float
-                                 / NULLIF("totalPredictions" + 1, 0)
+                                 / NULLIF("totalPredictions" + 1, 0),
+          "reputationScore"    = GREATEST(0, "reputationScore" + ${repDelta})
       WHERE id = ${prediction.userId}
     `;
   }

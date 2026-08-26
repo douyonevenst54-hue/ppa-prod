@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { setPiAccessToken } from "@/lib/pi-session";
 
 export interface PPAUser {
   id: string;
@@ -69,6 +70,16 @@ declare global {
 
 export type AuthStatus = "loading" | "authenticated" | "public";
 
+/**
+ * Scopes PPA requests.
+ *
+ * `wallet_address` was dropped when redemption was removed: there is no A2U
+ * payout any more, so there is nothing to send Pi to. Not holding the
+ * permission is also a privacy claim the policy can make honestly, and it is
+ * what the permanent "Re-authorize Pi access" card in Profile was asking for.
+ */
+const PI_SCOPES = ["username", "payments"];
+
 export function usePiAuth() {
   const [user, setUser] = useState<PPAUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
@@ -79,11 +90,15 @@ export function usePiAuth() {
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        // Validate against the server before trusting the cache.
+        // Take the SERVER's record, not the cached one. The cache is only a
+        // hint about who we are; every field comes back fresh.
         fetch(`/api/user/${parsed.id}`)
-          .then((r) => {
+          .then(async (r) => {
             if (!r.ok) throw new Error("stale");
-            setUser(parsed);
+            const data = await r.json();
+            const fresh = (data.user ?? data) as PPAUser;
+            if (!fresh?.id) throw new Error("stale");
+            setUser(fresh);
             setStatus("authenticated");
           })
           .catch(() => {
@@ -134,7 +149,7 @@ export function usePiAuth() {
       // that load the SDK script don't hang on a missing native bridge.
       const authResult = await Promise.race([
         window.Pi.authenticate(
-          ["username", "payments", "wallet_address"],
+          PI_SCOPES,
           onIncompletePaymentFound
         ),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
@@ -211,8 +226,14 @@ export function usePiAuth() {
       throw new Error("Auth response missing user");
     }
 
+    // THE FIX FOR EVERY 401.
+    // The token was previously sent to /api/auth/pi and then discarded, so
+    // nothing could authenticate afterwards. Every route now resolves the user
+    // from this token; apiFetch() reads it from here.
+    setPiAccessToken(authResult.accessToken);
+
     setUser(data.user);
-    localStorage.setItem("ppa_user", JSON.stringify(data.user));
+    cacheIdentity(data.user);
   }
 
   /**
@@ -236,7 +257,7 @@ export function usePiAuth() {
     );
 
     const authResult = await authenticateWithTimeout(
-      ["username", "payments", "wallet_address"],
+      PI_SCOPES,
       onIncompletePaymentFound
     );
 
@@ -255,10 +276,41 @@ export function usePiAuth() {
   }
 }, []);
 
+  /**
+   * Cache identity only — never the balance.
+   *
+   * The previous version stored the whole user object, balance included, and
+   * on reload displayed the cached number. That made the balance both stale and
+   * trivially editable from devtools. Balances now always come from the server.
+   */
+  function cacheIdentity(u: PPAUser) {
+    localStorage.setItem(
+      "ppa_user",
+      JSON.stringify({ id: u.id, piUserId: u.piUserId, username: u.username }),
+    );
+  }
+
   function updateUser(updatedUser: PPAUser) {
     setUser(updatedUser);
-    localStorage.setItem("ppa_user", JSON.stringify(updatedUser));
+    cacheIdentity(updatedUser);
   }
+
+  /** Re-read the authoritative user record. Call after anything that moves PPA. */
+  const refreshUser = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`/api/user/${user.id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const fresh = (data.user ?? data) as PPAUser;
+      if (fresh?.id) {
+        setUser(fresh);
+        cacheIdentity(fresh);
+      }
+    } catch {
+      // Non-fatal: the screen keeps the value it has.
+    }
+  }, [user?.id]);
 
   function signOut() {
     try {
@@ -275,6 +327,7 @@ export function usePiAuth() {
     } catch {
       // non-fatal
     }
+    setPiAccessToken(null);
     setUser(null);
     setStatus("public");
   }
@@ -297,7 +350,7 @@ export function usePiAuth() {
       await new Promise((r) => setTimeout(r, 300));
 
       const auth = await window.Pi.authenticate(
-        ["username", "payments", "wallet_address"],
+        PI_SCOPES,
         onIncompletePaymentFound
       );
       await signInWithPi(auth);
@@ -308,5 +361,5 @@ export function usePiAuth() {
     }
   }
 
-  return { user, status, loading, signIn, signOut, forceReauth, updateUser };
+  return { user, status, loading, signIn, signOut, forceReauth, updateUser, refreshUser };
 }
