@@ -1,157 +1,210 @@
 /**
  * Find and repair balance drift.
  *
- *   npx tsx scripts/reconcile-drift.ts           # report only, changes nothing
- *   npx tsx scripts/reconcile-drift.ts --apply   # write reconciliation entries
+ *   npx tsx scripts/reconcile-drift.ts             # report only
+ *   npx tsx scripts/reconcile-drift.ts --apply     # repair
  *
- * ── WHAT DRIFT MEANS ──────────────────────────────────────────────────────
+ * ── TWO KINDS OF DRIFT ────────────────────────────────────────────────────
  *
- * `User.ppaBalance` is higher (or lower) than the sum the hash chain accounts
- * for. That happens exactly one way: something wrote the balance directly
- * instead of going through appendLedgerEntry. The chain isn't corrupt — it's
- * honest about not knowing where the difference came from.
+ * 1. FINAL BALANCE DRIFT — "chain says X, User.ppaBalance says Y".
+ *    The chain is internally consistent; the balance just moved without it.
+ *    Repair: append an `adjust` entry for the difference. Nothing is rewritten,
+ *    the gap stays visible as a labelled row.
  *
- * ── HOW IT REPAIRS ────────────────────────────────────────────────────────
+ * 2. BALANCE-AFTER DRIFT — "chain says X, row says Y" at a specific row.
+ *    A gated write landed ON TOP of unreconciled drift. appendLedgerEntry
+ *    computes balanceAfter as (current actual balance + delta), so if the
+ *    balance was already ahead of the chain, the new row bakes that gap in.
+ *    The row is genuine and its hash is valid — it just records a balance the
+ *    chain can't derive from its own history.
  *
- * NOT by editing the balance, and NOT by rewriting history. It appends a new
- * `adjust` entry for the difference, so the chain catches up to reality and the
- * gap is permanently visible as a labelled row rather than quietly erased.
+ *    This cannot be fixed by appending, because verification fails AT that row
+ *    and never reaches anything after it. The only honest repair is to close
+ *    the old chain and open a new one.
  *
- * That is the right instinct for any ledger: you never fix the past, you record
- * a correction. Anyone auditing later can see exactly when the drift happened,
- * how large it was, and that it was reconciled rather than hidden.
+ * ── WHAT "CLOSING A CHAIN" MEANS HERE ─────────────────────────────────────
  *
- * Run the report first. If the numbers don't match what you expect from the
- * unchained rows it prints, find the write path before reconciling — otherwise
- * you'll be reconciling the same drift again next week.
+ * For the affected user we clear `prevHash` and `rowHash` on their existing
+ * chained rows and write a fresh genesis snapshot at the true balance.
+ *
+ * The rows themselves are NOT deleted. Amount, type, source and timestamp all
+ * survive — what's dropped is the cryptographic linkage, which was already
+ * unverifiable. So the history of what happened stays readable; what changes is
+ * that we stop claiming those rows are chain-verified when they aren't.
+ *
+ * The new snapshot records why, in its `source`, so the break is documented
+ * rather than quietly papered over. That's the honest version: a ledger you
+ * silently "fix" is worth less than one that says where it lost the thread.
  */
 
 import { PrismaClient } from "@prisma/client";
-import { appendLedgerEntry, verifyUserChain } from "../src/lib/ledger";
+import { appendLedgerEntry, verifyUserChain, computeRowHash } from "../src/lib/ledger";
 
 const prisma = new PrismaClient();
 const APPLY = process.argv.includes("--apply");
+const ZERO_HASH = "0".repeat(64);
 
-async function main() {
+type Problem =
+  | { kind: "final"; piUserId: string; username: string; chain: number; actual: number }
+  | { kind: "rowAfter"; piUserId: string; username: string; chain: number; row: number }
+  | { kind: "hash"; piUserId: string; username: string; reason: string };
+
+async function classify(): Promise<Problem[]> {
   const users = await prisma.user.findMany({
-    select: { id: true, piUserId: true, username: true, ppaBalance: true },
+    select: { piUserId: true, username: true },
     orderBy: { createdAt: "asc" },
   });
 
-  const drifted: Array<{
-    piUserId: string;
-    username: string;
-    chain: number;
-    actual: number;
-    delta: number;
-  }> = [];
+  const problems: Problem[] = [];
 
-  for (const user of users) {
-    const check = await verifyUserChain(prisma, user.piUserId);
+  for (const u of users) {
+    const check = await verifyUserChain(prisma, u.piUserId);
     if (check.ok) continue;
 
-    // Only balance drift is auto-repairable. A prevHash or rowHash mismatch
-    // means the rows themselves were altered, and that needs a human.
-    const match = /chain says (-?\d+), User\.ppaBalance says (-?\d+)/.exec(check.reason);
-    if (!match) {
-      console.error(`UNREPAIRABLE  ${user.username}: ${check.reason}`);
+    const final = /final balance drift \(chain says (-?\d+), User\.ppaBalance says (-?\d+)\)/.exec(check.reason);
+    if (final) {
+      problems.push({
+        kind: "final",
+        piUserId: u.piUserId,
+        username: u.username,
+        chain: Number(final[1]),
+        actual: Number(final[2]),
+      });
       continue;
     }
 
-    const chain = Number(match[1]);
-    const actual = Number(match[2]);
-    drifted.push({
-      piUserId: user.piUserId,
-      username: user.username,
-      chain,
-      actual,
-      delta: actual - chain,
+    const rowAfter = /balanceAfter drift \(chain says (-?\d+), row says (-?\d+)\)/.exec(check.reason);
+    if (rowAfter) {
+      problems.push({
+        kind: "rowAfter",
+        piUserId: u.piUserId,
+        username: u.username,
+        chain: Number(rowAfter[1]),
+        row: Number(rowAfter[2]),
+      });
+      continue;
+    }
+
+    // prevHash / rowHash mismatch — the rows themselves were altered. Never
+    // repaired automatically; that needs a person looking at the data.
+    problems.push({
+      kind: "hash",
+      piUserId: u.piUserId,
+      username: u.username,
+      reason: check.reason,
     });
   }
 
-  if (drifted.length === 0) {
-    console.log("No drift. Every chain matches its balance.");
+  return problems;
+}
+
+/** Close the old chain and open a new one at the true balance. */
+async function rebaseline(piUserId: string): Promise<number> {
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Array<{ id: string; ppaBalance: number }>>`
+      SELECT id, "ppaBalance" FROM "User" WHERE "piUserId" = ${piUserId} FOR UPDATE
+    `;
+    const user = rows[0];
+    if (!user) throw new Error(`user not found: ${piUserId}`);
+
+    // Drop the linkage, keep the rows. Amount, type, source and createdAt all
+    // survive — only the hashes go, and they were unverifiable anyway.
+    const cleared = await tx.pPATransaction.updateMany({
+      where: { userId: user.id, rowHash: { not: null } },
+      data: { prevHash: null, rowHash: null, isSnapshot: false },
+    });
+
+    const createdAt = new Date();
+    const source = `rebaseline:pre_gate_drift`;
+    const rowHash = computeRowHash({
+      prevHash: ZERO_HASH,
+      piUserId,
+      amount: user.ppaBalance,
+      type: "snapshot",
+      source,
+      balanceAfter: user.ppaBalance,
+      createdAtIso: createdAt.toISOString(),
+      idempotencyKey: null,
+    });
+
+    await tx.pPATransaction.create({
+      data: {
+        userId: user.id,
+        amount: user.ppaBalance,
+        type: "snapshot",
+        source,
+        balanceAfter: user.ppaBalance,
+        prevHash: ZERO_HASH,
+        rowHash,
+        isSnapshot: true,
+        createdAt,
+      },
+    });
+
+    return cleared.count;
+  });
+}
+
+async function main() {
+  const problems = await classify();
+
+  if (problems.length === 0) {
+    console.log("All chains verify. Nothing to reconcile.");
     return;
   }
 
-  console.log(`\n${drifted.length} account(s) drifted:\n`);
-  for (const d of drifted) {
-    const sign = d.delta > 0 ? "+" : "";
-    console.log(
-      `  ${d.username.padEnd(18)} chain ${String(d.chain).padStart(7)}  actual ${String(d.actual).padStart(7)}  ${sign}${d.delta}`,
-    );
-  }
-
-  // Show the unchained rows behind the drift, so the write path is findable.
-  console.log(`\nLedger rows written without a hash (these are the culprits):\n`);
-  for (const d of drifted) {
-    const rows = await prisma.pPATransaction.findMany({
-      where: {
-        user: { piUserId: d.piUserId },
-        rowHash: null,
-        createdAt: {
-          gt: new Date(Date.now() - 7 * 24 * 3600 * 1000),
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      select: { amount: true, type: true, source: true, createdAt: true },
-    });
-
-    if (rows.length === 0) {
-      console.log(`  ${d.username}: no unchained rows — the balance was changed with no ledger row at all`);
-      continue;
-    }
-    for (const r of rows) {
-      console.log(
-        `  ${d.username.padEnd(18)} ${String(r.amount).padStart(6)}  ${r.type.padEnd(8)} ${r.source}  ${r.createdAt.toISOString()}`,
-      );
+  console.log(`\n${problems.length} account(s) need attention:\n`);
+  for (const p of problems) {
+    if (p.kind === "final") {
+      const delta = p.actual - p.chain;
+      console.log(`  ${p.username.padEnd(18)} final drift    chain ${p.chain}  actual ${p.actual}  ${delta > 0 ? "+" : ""}${delta}`);
+    } else if (p.kind === "rowAfter") {
+      console.log(`  ${p.username.padEnd(18)} row drift      chain ${p.chain}  row ${p.row}  (needs rebaseline)`);
+    } else {
+      console.log(`  ${p.username.padEnd(18)} HASH MISMATCH  ${p.reason}  (manual review)`);
     }
   }
 
   if (!APPLY) {
-    console.log(`\nReport only. Re-run with --apply to append reconciliation entries.`);
-    console.log(`Find the write path first — otherwise this drift comes back.`);
+    console.log(`\nReport only. Re-run with --apply to repair.`);
+    console.log(`Deploy first if anything is still writing outside the gate.`);
     return;
   }
 
-  console.log(`\nAppending reconciliation entries:\n`);
+  console.log(`\nRepairing:\n`);
 
-  for (const d of drifted) {
+  for (const p of problems) {
     try {
-      const entry = await appendLedgerEntry(prisma, {
-        piUserId: d.piUserId,
-        delta: d.delta,
-        type: "adjust",
-        source: `reconciliation:unchained_write`,
-        // Stable per user per drift amount, so a re-run can't double-adjust.
-        idempotencyKey: `reconcile:${d.piUserId}:${d.chain}:${d.actual}`,
-      });
-
-      // appendLedgerEntry SETS the balance to chain + delta, which equals the
-      // balance we already observed — so nothing actually moves. The point is
-      // the row, not the arithmetic.
-      console.log(
-        `  ${d.username.padEnd(18)} ${d.delta > 0 ? "+" : ""}${d.delta}  ->  ${entry.balanceAfter}  ${entry.deduplicated ? "(already reconciled)" : ""}`,
-      );
+      if (p.kind === "final") {
+        const delta = p.actual - p.chain;
+        const entry = await appendLedgerEntry(prisma, {
+          piUserId: p.piUserId,
+          delta,
+          type: "adjust",
+          source: "reconciliation:unchained_write",
+          idempotencyKey: `reconcile:${p.piUserId}:${p.chain}:${p.actual}`,
+        });
+        console.log(`  ${p.username.padEnd(18)} adjust ${delta > 0 ? "+" : ""}${delta} -> ${entry.balanceAfter}`);
+      } else if (p.kind === "rowAfter") {
+        const cleared = await rebaseline(p.piUserId);
+        console.log(`  ${p.username.padEnd(18)} rebaselined (${cleared} row(s) unlinked, kept as history)`);
+      } else {
+        console.log(`  ${p.username.padEnd(18)} SKIPPED — hash mismatch needs manual review`);
+      }
     } catch (err) {
-      console.error(`  ${d.username}: FAILED — ${(err as Error).message}`);
+      console.error(`  ${p.username.padEnd(18)} FAILED — ${(err as Error).message}`);
     }
   }
 
   console.log(`\nRe-verifying:\n`);
-  let broken = 0;
-  for (const d of drifted) {
-    const check = await verifyUserChain(prisma, d.piUserId);
-    if (check.ok) {
-      console.log(`  ok      ${d.username}`);
-    } else {
-      broken++;
-      console.error(`  BROKEN  ${d.username}: ${check.reason}`);
-    }
+  const after = await classify();
+  if (after.length === 0) {
+    console.log("  All chains verify.");
+  } else {
+    for (const p of after) console.error(`  STILL BROKEN  ${p.username} (${p.kind})`);
   }
 
-  process.exit(broken > 0 ? 1 : 0);
+  process.exit(after.length > 0 ? 1 : 0);
 }
 
 main().finally(() => prisma.$disconnect());
