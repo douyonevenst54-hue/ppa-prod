@@ -2,6 +2,7 @@
 
 import { useAuth } from "@/components/AuthProvider";
 import Link from "next/link";
+import EmblemCard from "@/components/EmblemCard";
 import PrivacySection from "./PrivacySection";
 
 const TIER_COLORS: Record<string, string> = {

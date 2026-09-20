@@ -15,6 +15,7 @@
 // --- Add these fields to your existing User model --------------------------
 //
 // model User {
+//   emblem Emblem?
 //   ...existing fields...
 //
 //   /// When the user confirmed they meet the minimum age. Null = never asked.
@@ -83,4 +84,81 @@ model RedemptionAttempt {
   attemptedAt DateTime @default(now())
 
   @@index([attemptedAt])
+}
+
+// Emblem additions. Merge into prisma/schema.prisma, then:
+//   npx prisma migrate dev --name emblems
+//
+// Additive only. Nothing existing is changed or dropped.
+//
+// NOTE ON tokenId / mintedAt / transferable:
+//   These columns exist but are unused. They are the ONLY difference between
+//   the soulbound system shipping now and an on-chain version later. Keeping
+//   them in the schema from day one means the later decision is a migration of
+//   behaviour, not a rewrite of the model — and keeping them NULL and false
+//   means nothing is transferable until someone deliberately changes that.
+// ============================================================================
+
+enum Realm {
+  THINK
+  PREDICT
+  CREATE
+  COMPETE
+  EXPLORE
+  CONNECT
+  LEAD
+}
+
+/// One Emblem per user. A view of their record, recomputed from counters.
+///
+/// Every field here is derivable — the row is a cache, not a source of truth.
+/// Delete the whole table and it regenerates identically, which is the property
+/// that keeps an Emblem from ever becoming a broken image.
+model Emblem {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  primaryRealm Realm
+  /// Sum of the seven realm levels, 0-35.
+  level        Int      @default(0)
+  /// Frozen once computed — "first 1,000 accounts" must keep meaning that.
+  pioneer      Boolean  @default(false)
+  /// { THINK: 3, PREDICT: 1, ... }
+  realmLevels  Json
+  /// Raw scores behind those levels, for display and for debugging retunes.
+  realmScores  Json
+  /// Derived visual traits. Cached so the renderer doesn't recompute per request.
+  traits       Json
+
+  /// --- reserved, unused ---
+  transferable Boolean   @default(false)
+  tokenId      String?   @unique
+  mintedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User               @relation(fields: [userId], references: [id])
+  milestones EmblemMilestone[]
+
+  @@index([primaryRealm, level])
+  @@index([level])
+}
+
+/// A threshold crossed, recorded permanently.
+///
+/// Levels are recomputed from live counters, but milestones are append-only.
+/// If the scoring formula is ever retuned, the history of what someone actually
+/// achieved under the old rules survives — which is the difference between a
+/// record and a leaderboard.
+model EmblemMilestone {
+  id         String   @id @default(cuid())
+  emblemId   String
+  realm      Realm
+  level      Int
+  achievedAt DateTime @default(now())
+
+  emblem Emblem @relation(fields: [emblemId], references: [id], onDelete: Cascade)
+
+  @@unique([emblemId, realm, level])
+  @@index([achievedAt])
 }
