@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
+import { apiFetch } from "@/lib/pi-session";
 
 interface Transaction {
   id: string;
@@ -66,7 +67,7 @@ export default function WalletPage() {
 
   async function fetchWallet() {
     try {
-      const res = await fetch(`/api/wallet?userId=${user?.id}`);
+      const res = await apiFetch(`/api/wallet?userId=${user?.id}`);
       const data = await res.json();
       setWallet(data);
     } catch (err) {

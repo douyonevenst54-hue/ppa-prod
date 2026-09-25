@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/pi-session";
 
 interface PaymentOptions {
   amount: number;
@@ -57,7 +58,7 @@ export function usePiPayment() {
         {
           onReadyForServerApproval: async (paymentId: string) => {
             try {
-              const res = await fetch("/api/payments/approve", {
+              const res = await apiFetch("/api/payments/approve", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ paymentId }),
@@ -71,7 +72,7 @@ export function usePiPayment() {
 
           onReadyForServerCompletion: async (paymentId: string, txid: string) => {
             try {
-              const res = await fetch("/api/payments/complete", {
+              const res = await apiFetch("/api/payments/complete", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ paymentId, txid, userId, ppaReward }),

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/pi-session";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -43,7 +44,7 @@ export default function CreatePollPage() {
     setError("");
 
     try {
-      const res = await fetch("/api/polls", {
+      const res = await apiFetch("/api/polls", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

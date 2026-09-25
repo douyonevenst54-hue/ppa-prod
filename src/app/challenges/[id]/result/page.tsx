@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { apiFetch } from "@/lib/pi-session";
 
 const TIER_MULTIPLIERS: Record<string, number> = {
   NEWCOMER: 0.8,
@@ -48,7 +49,7 @@ function ResultContent() {
     setSaving(true);
 
     try {
-      const res = await fetch("/api/challenges/submit", {
+      const res = await apiFetch("/api/challenges/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

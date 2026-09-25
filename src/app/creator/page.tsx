@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
+import { apiFetch } from "@/lib/pi-session";
 
 interface CreatorStats {
   totalCreated: number;
@@ -30,7 +31,7 @@ export default function CreatorPage() {
 
   async function fetchStats() {
     try {
-      const res = await fetch(`/api/creator/stats?userId=${user?.id}`);
+      const res = await apiFetch(`/api/creator/stats?userId=${user?.id}`);
       const data = await res.json();
       if (data.stats) setStats(data.stats);
     } catch (err) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiFetch } from "@/lib/pi-session";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,7 +25,7 @@ export default function CreatePredictionPage() {
     setError("");
 
     try {
-      const res = await fetch("/api/predictions", {
+      const res = await apiFetch("/api/predictions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

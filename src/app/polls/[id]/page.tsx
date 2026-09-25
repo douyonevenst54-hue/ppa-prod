@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { useParams } from "next/navigation";
+import { apiFetch } from "@/lib/pi-session";
 
 interface PollOption {
   id: string;
@@ -61,7 +62,7 @@ export default function PollVotePage() {
     setError("");
 
     try {
-      const res = await fetch("/api/polls/vote", {
+      const res = await apiFetch("/api/polls/vote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

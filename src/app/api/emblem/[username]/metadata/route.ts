@@ -51,6 +51,9 @@ export async function GET(
       attributes: traitsToAttributes(emblem.traits, emblem.standings),
       properties: { transferable: false, soulbound: true },
     },
-    { headers: { "Cache-Control": "public, max-age=300" } },
+      { headers: {
+  "Content-Type": "application/json; charset=utf-8",
+  "Cache-Control": "public, max-age=300",
+} },
   );
 }

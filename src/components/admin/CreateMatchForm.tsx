@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiFetch } from "@/lib/pi-session";
 
 const SPORTS = [
   { value: "soccer", label: "⚽ Soccer", allowDraw: true },
@@ -46,7 +47,7 @@ export function CreateMatchForm({ userId, onCreated }: CreateMatchFormProps) {
     setError("");
     setSaving(true);
     try {
-      const res = await fetch("/api/admin/predictions", {
+      const res = await apiFetch("/api/admin/predictions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

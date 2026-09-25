@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { setPiAccessToken } from "@/lib/pi-session";
+import { setPiAccessToken, apiFetch } from "@/lib/pi-session";
 
 export interface PPAUser {
   id: string;
@@ -183,13 +183,13 @@ export function usePiAuth() {
   try {
     if (p.transaction?.txid) {
       // Payment already has a blockchain tx — complete it server-side
-      await fetch("/api/payments/complete", {
+      await apiFetch("/api/payments/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paymentId: p.identifier, txid: p.transaction.txid }),
       });
     } else {
-      await fetch("/api/payments/approve", {
+      await apiFetch("/api/payments/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paymentId: p.identifier }),

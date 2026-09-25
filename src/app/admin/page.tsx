@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { CreateMatchForm } from "@/components/admin/CreateMatchForm";
+import { apiFetch } from "@/lib/pi-session";
 
 interface AdminPrediction {
   id: string;
@@ -100,7 +101,7 @@ export default function AdminPage() {
   const fetchPredictions = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const res = await fetch(`/api/admin/predictions?userId=${user.id}`);
+      const res = await apiFetch(`/api/admin/predictions?userId=${user.id}`);
       const data = await res.json();
       if (data.error) { setError(data.error); return; }
       setPredictions(data.predictions || []);
@@ -112,7 +113,7 @@ export default function AdminPage() {
     if (!user?.id) return;
     setQLoading(true);
     try {
-      const res = await fetch(`/api/admin/questions?userId=${user.id}&category=${questionFilter}`);
+      const res = await apiFetch(`/api/admin/questions?userId=${user.id}&category=${questionFilter}`);
       const data = await res.json();
       if (data.error) { setError(data.error); return; }
       setQuestions(data.questions || []);
@@ -128,7 +129,7 @@ export default function AdminPage() {
     if (!user?.id || resolving) return;
     setResolving(contentId);
     try {
-      const res = await fetch("/api/admin/resolve", {
+      const res = await apiFetch("/api/admin/resolve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: user.id, contentId, correctAnswer }),
@@ -146,7 +147,7 @@ export default function AdminPage() {
     setGenerating(true);
     setGenResult("");
     try {
-      const res = await fetch("/api/admin/generate-questions", {
+      const res = await apiFetch("/api/admin/generate-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -168,7 +169,7 @@ export default function AdminPage() {
   const handleDeleteQuestion = async (questionId: string) => {
     if (!user?.id) return;
     try {
-      await fetch(`/api/admin/questions?userId=${user.id}&questionId=${questionId}`, {
+      await apiFetch(`/api/admin/questions?userId=${user.id}&questionId=${questionId}`, {
         method: "DELETE",
       });
       setQuestions(prev => prev.filter(q => q.id !== questionId));
