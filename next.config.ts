@@ -11,10 +11,20 @@ const nextConfig: NextConfig = {
           // so we rely on CSP frame-ancestors which supports a list.
           {
             key: "Content-Security-Policy",
-            value: "frame-ancestors 'self' https://*.minepi.com https://*.pinet.com https://*.pi.app https://sandbox.minepi.com;",
+            value:
+              "frame-ancestors 'self' https://*.minepi.com https://*.pinet.com https://*.pi.app https://sandbox.minepi.com;",
           },
         ],
       },
+    ];
+  },
+
+  async redirects() {
+    return [
+      // The old buy/redeem screens. Both are deleted; anyone landing on a
+      // bookmark or a cached shell gets the top-up screen instead of a 404.
+      { source: "/exchange", destination: "/topup", permanent: false },
+      { source: "/wallet/exchange", destination: "/topup", permanent: false },
     ];
   },
 };
