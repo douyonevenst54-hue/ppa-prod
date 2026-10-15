@@ -1,0 +1,158 @@
+{
+  "GENERAL": {
+    "EASY": [
+      {"text":"How many continents are there on Earth?","options":["5","6","7","8"],"correctAnswer":"7"},
+      {"text":"What is the largest ocean on Earth?","options":["Atlantic","Indian","Arctic","Pacific"],"correctAnswer":"Pacific"},
+      {"text":"How many minutes are in a full day?","options":["1440","1200","960","1800"],"correctAnswer":"1440"},
+      {"text":"Which planet is closest to the Sun?","options":["Venus","Mercury","Mars","Earth"],"correctAnswer":"Mercury"},
+      {"text":"What is the chemical symbol for water?","options":["WA","H2O","O2","HO2"],"correctAnswer":"H2O"},
+      {"text":"Which is the longest river in the world by most measures?","options":["Amazon","Nile","Yangtze","Mississippi"],"correctAnswer":"Nile"}
+    ],
+    "MEDIUM": [
+      {"text":"Which country has the most time zones, including its territories?","options":["Russia","United States","China","France"],"correctAnswer":"France"},
+      {"text":"What is the only mammal capable of true sustained flight?","options":["Flying squirrel","Bat","Colugo","Sugar glider"],"correctAnswer":"Bat"},
+      {"text":"Roughly what percentage of the human body is water?","options":["About 40%","About 60%","About 80%","About 95%"],"correctAnswer":"About 60%"},
+      {"text":"Which language has the most native speakers worldwide?","options":["English","Spanish","Mandarin Chinese","Hindi"],"correctAnswer":"Mandarin Chinese"},
+      {"text":"What does the Richter scale measure?","options":["Wind speed","Earthquake magnitude","Rainfall","Ocean depth"],"correctAnswer":"Earthquake magnitude"},
+      {"text":"Which country is both the smallest by area and by population?","options":["Monaco","Nauru","Vatican City","San Marino"],"correctAnswer":"Vatican City"}
+    ],
+    "HARD": [
+      {"text":"What is the approximate speed of light in a vacuum?","options":["300,000 km/s","150,000 km/s","3,000 km/s","30,000 km/s"],"correctAnswer":"300,000 km/s"},
+      {"text":"Which element has the highest melting point?","options":["Titanium","Tungsten","Platinum","Osmium"],"correctAnswer":"Tungsten"},
+      {"text":"The Coriolis effect is caused by what?","options":["Ocean currents","Earth's rotation","Lunar gravity","Magnetic fields"],"correctAnswer":"Earth's rotation"},
+      {"text":"What is the most abundant gas in Earth's atmosphere?","options":["Oxygen","Carbon dioxide","Nitrogen","Argon"],"correctAnswer":"Nitrogen"},
+      {"text":"Approximately how old is the Earth?","options":["4.5 billion years","13.8 billion years","2.1 billion years","450 million years"],"correctAnswer":"4.5 billion years"},
+      {"text":"Which organ produces insulin in the human body?","options":["Liver","Pancreas","Kidney","Thyroid"],"correctAnswer":"Pancreas"}
+    ]
+  },
+  "TECH": {
+    "EASY": [
+      {"text":"What does API stand for?","options":["App Programming Interface","Application Programming Interface","Applied Protocol Interface","Automated Program Integration"],"correctAnswer":"Application Programming Interface"},
+      {"text":"What does HTTP stand for?","options":["HyperText Transfer Protocol","High Transfer Text Protocol","HyperText Transmission Process","Host Transfer Type Protocol"],"correctAnswer":"HyperText Transfer Protocol"},
+      {"text":"How many bits are in a byte?","options":["4","8","16","32"],"correctAnswer":"8"},
+      {"text":"Which company develops the Android operating system?","options":["Apple","Microsoft","Google","Samsung"],"correctAnswer":"Google"},
+      {"text":"What does 'CPU' stand for?","options":["Central Processing Unit","Computer Power Unit","Core Program Utility","Central Program Unit"],"correctAnswer":"Central Processing Unit"},
+      {"text":"Which of these is a version control system?","options":["Docker","Git","Redis","Nginx"],"correctAnswer":"Git"}
+    ],
+    "MEDIUM": [
+      {"text":"What is the time complexity of binary search?","options":["O(n)","O(log n)","O(n squared)","O(1)"],"correctAnswer":"O(log n)"},
+      {"text":"In databases, what does ACID stand for?","options":["Atomicity, Consistency, Isolation, Durability","Access, Control, Integrity, Delivery","Atomic, Cached, Indexed, Distributed","Append, Commit, Index, Drop"],"correctAnswer":"Atomicity, Consistency, Isolation, Durability"},
+      {"text":"What does a hash function guarantee?","options":["The output can be reversed","The same input always gives the same output","The output is always unique","The output is encrypted"],"correctAnswer":"The same input always gives the same output"},
+      {"text":"Which HTTP status code means 'Not Found'?","options":["301","403","404","500"],"correctAnswer":"404"},
+      {"text":"What is the purpose of an index in a database?","options":["To encrypt data","To speed up reads","To compress storage","To back up tables"],"correctAnswer":"To speed up reads"},
+      {"text":"What does 'idempotent' mean for an API request?","options":["It runs faster each time","Repeating it has the same effect as doing it once","It cannot be cached","It requires authentication"],"correctAnswer":"Repeating it has the same effect as doing it once"}
+    ],
+    "HARD": [
+      {"text":"In a hash-chained ledger, what does tampering with one row break?","options":["Only that row","That row and every row after it","The entire database","Nothing detectable"],"correctAnswer":"That row and every row after it"},
+      {"text":"What problem does the CAP theorem describe?","options":["Cache invalidation","Trade-offs between consistency, availability and partition tolerance","Compiler optimization limits","Network packet loss"],"correctAnswer":"Trade-offs between consistency, availability and partition tolerance"},
+      {"text":"What is a race condition?","options":["A slow network request","Two operations whose outcome depends on timing","A loop that never ends","A failed database migration"],"correctAnswer":"Two operations whose outcome depends on timing"},
+      {"text":"Why does SELECT ... FOR UPDATE exist in SQL?","options":["To speed up the query","To lock rows until the transaction ends","To update without a WHERE clause","To cache the result"],"correctAnswer":"To lock rows until the transaction ends"},
+      {"text":"What does a 'soulbound' token mean?","options":["It expires after a year","It cannot be transferred or sold","It is stored offline","It requires two signatures"],"correctAnswer":"It cannot be transferred or sold"},
+      {"text":"In public-key cryptography, what is shared openly?","options":["The private key","The public key","Both keys","Neither key"],"correctAnswer":"The public key"}
+    ]
+  },
+  "FINANCE": {
+    "EASY": [
+      {"text":"What does 'interest' mean on a loan?","options":["The amount borrowed","The cost of borrowing","A type of tax","A bank fee for opening an account"],"correctAnswer":"The cost of borrowing"},
+      {"text":"What is a budget?","options":["A type of loan","A plan for income and spending","A savings account","A credit score"],"correctAnswer":"A plan for income and spending"},
+      {"text":"What does 'inflation' describe?","options":["Prices rising over time","Wages rising over time","Interest rates falling","Banks closing"],"correctAnswer":"Prices rising over time"},
+      {"text":"What is an emergency fund for?","options":["Long-term investing","Unexpected expenses","Paying taxes","Buying stocks"],"correctAnswer":"Unexpected expenses"},
+      {"text":"What does 'debt' mean?","options":["Money you have saved","Money you owe","Money you earn","Money you invest"],"correctAnswer":"Money you owe"},
+      {"text":"Which of these is a fixed expense?","options":["Groceries","Rent","Entertainment","Fuel"],"correctAnswer":"Rent"}
+    ],
+    "MEDIUM": [
+      {"text":"What does APR stand for?","options":["Annual Percentage Rate","Applied Payment Ratio","Average Principal Return","Annual Profit Rate"],"correctAnswer":"Annual Percentage Rate"},
+      {"text":"What is compound interest?","options":["Interest on the principal only","Interest earned on both principal and accumulated interest","A fixed monthly fee","Interest paid at the end of a loan"],"correctAnswer":"Interest earned on both principal and accumulated interest"},
+      {"text":"What does diversification reduce?","options":["Returns","Risk concentrated in one asset","Taxes","Transaction fees"],"correctAnswer":"Risk concentrated in one asset"},
+      {"text":"What is a credit score primarily used for?","options":["Calculating income tax","Assessing borrowing risk","Setting salary levels","Tracking spending"],"correctAnswer":"Assessing borrowing risk"},
+      {"text":"What does 'liquidity' mean for an asset?","options":["How quickly it can be converted to cash","How much it is worth","How long it has been held","How it is taxed"],"correctAnswer":"How quickly it can be converted to cash"},
+      {"text":"What is the difference between gross and net income?","options":["Gross is before deductions, net is after","Net is before deductions, gross is after","They are the same","Gross includes only bonuses"],"correctAnswer":"Gross is before deductions, net is after"}
+    ],
+    "HARD": [
+      {"text":"What is a 'spread' in an exchange rate?","options":["A government fee","The difference between buy and sell prices","A type of tax","The rate of inflation"],"correctAnswer":"The difference between buy and sell prices"},
+      {"text":"What does 'closed-loop' mean for a stored-value credit?","options":["It can be spent anywhere","It can only be spent with the issuer","It expires monthly","It earns interest"],"correctAnswer":"It can only be spent with the issuer"},
+      {"text":"What is an escrow account used for?","options":["Holding funds until conditions are met","Earning high interest","Paying salaries","Issuing loans"],"correctAnswer":"Holding funds until conditions are met"},
+      {"text":"In accounting, what does double-entry bookkeeping require?","options":["Two accountants","Every transaction recorded twice, as debit and credit","Two bank accounts","Annual audits"],"correctAnswer":"Every transaction recorded twice, as debit and credit"},
+      {"text":"What is the time value of money?","options":["Money loses value when stored","Money available now is worth more than the same amount later","Money gains value with age","Interest rates never change"],"correctAnswer":"Money available now is worth more than the same amount later"},
+      {"text":"What does 'amortization' describe?","options":["Paying off debt in scheduled installments","Increasing a loan balance","Transferring a loan","Refinancing"],"correctAnswer":"Paying off debt in scheduled installments"}
+    ]
+  },
+  "SOCIAL": {
+    "EASY": [
+      {"text":"What does 'community' most directly refer to?","options":["A government agency","A group sharing a place or common interest","A business","A legal contract"],"correctAnswer":"A group sharing a place or common interest"},
+      {"text":"What is a volunteer?","options":["Someone paid hourly","Someone who gives time without pay","A government employee","A contractor"],"correctAnswer":"Someone who gives time without pay"},
+      {"text":"What does 'bilingual' mean?","options":["Speaking two languages","Writing in two scripts","Living in two countries","Holding two passports"],"correctAnswer":"Speaking two languages"},
+      {"text":"What is a diaspora?","options":["A type of government","People dispersed from their original homeland","A religious holiday","A trade agreement"],"correctAnswer":"People dispersed from their original homeland"},
+      {"text":"What does 'literacy' mean?","options":["The ability to read and write","The ability to speak publicly","Formal education","Knowledge of history"],"correctAnswer":"The ability to read and write"},
+      {"text":"What is mutual aid?","options":["A government program","Communities helping each other directly","A type of insurance","A bank loan"],"correctAnswer":"Communities helping each other directly"}
+    ],
+    "MEDIUM": [
+      {"text":"What is a social determinant of health?","options":["A genetic trait","A condition in the environment where people live and work","A medical diagnosis","A type of medication"],"correctAnswer":"A condition in the environment where people live and work"},
+      {"text":"What does 'health equity' mean?","options":["Everyone receives identical treatment","Everyone has a fair opportunity to be as healthy as possible","Health care is free","Hospitals are equally funded"],"correctAnswer":"Everyone has a fair opportunity to be as healthy as possible"},
+      {"text":"What is the difference between an immigrant and a refugee?","options":["There is none","A refugee is forced to flee; an immigrant chooses to move","Refugees are temporary","Immigrants cannot work"],"correctAnswer":"A refugee is forced to flee; an immigrant chooses to move"},
+      {"text":"What does a community health worker typically do?","options":["Perform surgery","Bridge communities and health services","Run hospitals","Write prescriptions"],"correctAnswer":"Bridge communities and health services"},
+      {"text":"What is 'code-switching'?","options":["Changing programming languages","Adjusting language or behavior between social contexts","Translating documents","Encrypting messages"],"correctAnswer":"Adjusting language or behavior between social contexts"},
+      {"text":"What does 'civic engagement' include?","options":["Only voting","Voting, volunteering, and participating in community decisions","Only protesting","Only paying taxes"],"correctAnswer":"Voting, volunteering, and participating in community decisions"}
+    ],
+    "HARD": [
+      {"text":"What does 'cultural humility' emphasize over cultural competence?","options":["Mastery of other cultures","Ongoing self-reflection and learning","Formal certification","Language fluency"],"correctAnswer":"Ongoing self-reflection and learning"},
+      {"text":"What is the 'digital divide'?","options":["A type of encryption","Unequal access to technology and connectivity","A software license","A generational conflict"],"correctAnswer":"Unequal access to technology and connectivity"},
+      {"text":"In public health, what does 'upstream' intervention mean?","options":["Treating symptoms","Addressing root causes before harm occurs","Emergency response","Hospital care"],"correctAnswer":"Addressing root causes before harm occurs"},
+      {"text":"What is social capital?","options":["Money held by nonprofits","The value of networks and relationships in a community","Government funding","Property owned collectively"],"correctAnswer":"The value of networks and relationships in a community"},
+      {"text":"What does 'language access' require of a public service?","options":["English-only materials","Meaningful service for people with limited English proficiency","Translation apps","Bilingual staff only"],"correctAnswer":"Meaningful service for people with limited English proficiency"},
+      {"text":"What is participatory research?","options":["Research done in secret","Research where the community helps shape the questions","Research funded publicly","Research with large samples"],"correctAnswer":"Research where the community helps shape the questions"}
+    ]
+  },
+  "SPORTS": {
+    "EASY": [
+      {"text":"How many players are on the field per team in association football (soccer)?","options":["9","10","11","12"],"correctAnswer":"11"},
+      {"text":"How many points is a standard basketball field goal inside the arc worth?","options":["1","2","3","4"],"correctAnswer":"2"},
+      {"text":"How often are the modern Summer Olympic Games held?","options":["Every 2 years","Every 3 years","Every 4 years","Every 5 years"],"correctAnswer":"Every 4 years"},
+      {"text":"In tennis, what is a score of zero called?","options":["Nil","Love","Duck","Blank"],"correctAnswer":"Love"},
+      {"text":"How many players are on a volleyball team on court?","options":["5","6","7","8"],"correctAnswer":"6"},
+      {"text":"What shape is a standard association football ball?","options":["Oval","Sphere","Cylinder","Cube"],"correctAnswer":"Sphere"}
+    ],
+    "MEDIUM": [
+      {"text":"In basketball, how long is the shot clock in the NBA?","options":["20 seconds","24 seconds","30 seconds","35 seconds"],"correctAnswer":"24 seconds"},
+      {"text":"How long is a standard association football match, excluding stoppage?","options":["80 minutes","90 minutes","100 minutes","120 minutes"],"correctAnswer":"90 minutes"},
+      {"text":"In athletics, how long is a marathon?","options":["38.2 km","40.0 km","42.195 km","45.5 km"],"correctAnswer":"42.195 km"},
+      {"text":"What does 'offside' broadly penalize in football?","options":["Fouling a defender","Being ahead of the ball and defenders when it is played","Handling the ball","Time wasting"],"correctAnswer":"Being ahead of the ball and defenders when it is played"},
+      {"text":"In basketball, what is a triple-double?","options":["Three players scoring 10+","Double figures in three statistical categories","Scoring 30 points","Three consecutive wins"],"correctAnswer":"Double figures in three statistical categories"},
+      {"text":"How many sets does a player typically need to win a men's Grand Slam tennis match?","options":["2","3","4","5"],"correctAnswer":"3"}
+    ],
+    "HARD": [
+      {"text":"In football, what is the maximum number of substitutions typically allowed in regulation under current competition rules?","options":["3","4","5","Unlimited"],"correctAnswer":"5"},
+      {"text":"What does VAR stand for in football?","options":["Video Assistant Referee","Verified Action Review","Visual Analysis Replay","Video Appeal Rule"],"correctAnswer":"Video Assistant Referee"},
+      {"text":"In basketball, what is the distance of the NBA three-point line at the top of the arc?","options":["22 feet","23 feet 9 inches","25 feet","21 feet"],"correctAnswer":"23 feet 9 inches"},
+      {"text":"What is the 'Fosbury Flop' associated with?","options":["Long jump","High jump","Pole vault","Triple jump"],"correctAnswer":"High jump"},
+      {"text":"In cricket, what is a 'hat-trick'?","options":["Three catches","Three wickets in three consecutive deliveries","Three sixes","Three run-outs"],"correctAnswer":"Three wickets in three consecutive deliveries"},
+      {"text":"How many rings are on the Olympic flag?","options":["4","5","6","7"],"correctAnswer":"5"}
+    ]
+  },
+  "POLITICS": {
+    "EASY": [
+      {"text":"What is a democracy?","options":["Rule by one person","Rule by the people, usually through elected representatives","Rule by the military","Rule by inheritance"],"correctAnswer":"Rule by the people, usually through elected representatives"},
+      {"text":"What is a constitution?","options":["A tax code","A foundational set of rules for governing","A trade agreement","A census"],"correctAnswer":"A foundational set of rules for governing"},
+      {"text":"What does it mean to 'vote'?","options":["To pay a tax","To express a formal choice in an election","To join a party","To run for office"],"correctAnswer":"To express a formal choice in an election"},
+      {"text":"What is a census?","options":["An election","An official count of a population","A tax return","A court ruling"],"correctAnswer":"An official count of a population"},
+      {"text":"What is a referendum?","options":["A court case","A direct public vote on a specific question","A party meeting","A budget proposal"],"correctAnswer":"A direct public vote on a specific question"},
+      {"text":"What does 'citizenship' confer?","options":["A job","Legal membership of a state, with rights and duties","Property rights only","Tax exemption"],"correctAnswer":"Legal membership of a state, with rights and duties"}
+    ],
+    "MEDIUM": [
+      {"text":"What is the separation of powers?","options":["Dividing government into branches that check each other","Splitting a country into regions","Separating church and state","Dividing tax revenue"],"correctAnswer":"Dividing government into branches that check each other"},
+      {"text":"What does 'judicial review' allow a court to do?","options":["Write new laws","Assess whether laws or acts conform to the constitution","Set tax rates","Appoint officials"],"correctAnswer":"Assess whether laws or acts conform to the constitution"},
+      {"text":"In a parliamentary system, who typically leads the government?","options":["The head of state","The prime minister","The chief justice","The speaker"],"correctAnswer":"The prime minister"},
+      {"text":"What is proportional representation?","options":["One representative per district","Seats allocated in proportion to votes received","Appointment by the president","Random selection"],"correctAnswer":"Seats allocated in proportion to votes received"},
+      {"text":"What does 'rule of law' mean?","options":["Everyone, including officials, is subject to the law","Laws can never change","Courts make all decisions","The majority always wins"],"correctAnswer":"Everyone, including officials, is subject to the law"},
+      {"text":"What is a coalition government?","options":["A single-party government","A government formed by two or more parties together","A military government","A caretaker government"],"correctAnswer":"A government formed by two or more parties together"}
+    ],
+    "HARD": [
+      {"text":"What is 'gerrymandering'?","options":["Counting votes twice","Drawing electoral boundaries to favor a group","Banning a party","Delaying an election"],"correctAnswer":"Drawing electoral boundaries to favor a group"},
+      {"text":"What distinguishes a federal system from a unitary one?","options":["Power is constitutionally divided between national and regional governments","It has a president","It has two legislative chambers","It holds more elections"],"correctAnswer":"Power is constitutionally divided between national and regional governments"},
+      {"text":"What does 'universal suffrage' mean?","options":["Compulsory voting","The right to vote extended to all adult citizens","Voting by mail","Voting at any age"],"correctAnswer":"The right to vote extended to all adult citizens"},
+      {"text":"What is the purpose of a secret ballot?","options":["To speed up counting","To protect voters from coercion","To reduce costs","To allow recounts"],"correctAnswer":"To protect voters from coercion"},
+      {"text":"What is an ombudsman?","options":["A tax collector","An official who investigates complaints against public bodies","A party leader","A regional governor"],"correctAnswer":"An official who investigates complaints against public bodies"},
+      {"text":"What does 'civil society' refer to?","options":["Government agencies","Voluntary organizations and associations outside the state and market","Political parties only","Courts and tribunals"],"correctAnswer":"Voluntary organizations and associations outside the state and market"}
+    ]
+  }
+}

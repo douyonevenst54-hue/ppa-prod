@@ -88,12 +88,6 @@ export default function AdminPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [questionStats, setQuestionStats] = useState<{ category: string; _count: { id: number } }[]>([]);
   const [qLoading, setQLoading] = useState(false);
-  const [genCategory, setGenCategory] = useState("GENERAL");
-  const [genDifficulty, setGenDifficulty] = useState("MEDIUM");
-  const [genCount, setGenCount] = useState(10);
-  const [genTopic, setGenTopic] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [genResult, setGenResult] = useState("");
   const [questionFilter, setQuestionFilter] = useState("ALL");
 
   const [error, setError] = useState("");
@@ -140,30 +134,6 @@ export default function AdminPage() {
       await fetchPredictions();
     } catch { setError("Failed to resolve"); }
     finally { setResolving(null); }
-  };
-
-  const handleGenerate = async () => {
-    if (!user?.id || generating) return;
-    setGenerating(true);
-    setGenResult("");
-    try {
-      const res = await apiFetch("/api/admin/generate-questions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          category: genCategory,
-          difficulty: genDifficulty,
-          count: genCount,
-          topic: genTopic,
-        }),
-      });
-      const data = await res.json();
-      if (data.error) { setGenResult(`❌ ${data.error}`); return; }
-      setGenResult(`✅ Generated ${data.generated}, saved ${data.saved} questions!`);
-      await fetchQuestions();
-    } catch { setGenResult("❌ Generation failed"); }
-    finally { setGenerating(false); }
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
@@ -229,7 +199,7 @@ export default function AdminPage() {
         <div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>⚡ Admin Panel</div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            Manage content • Generate questions
+            Manage content • Review question bank
           </div>
         </div>
       </div>
@@ -418,105 +388,18 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* AI Generator */}
-            <div className="card" style={{ marginBottom: 16, border: "1px solid #6c63ff44" }}>
-              <div style={{ fontSize: 13, color: "var(--accent-primary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
-                🤖 AI QUESTION GENERATOR
+            {/* Pool note — questions are curated, not generated at runtime */}
+            <div className="card" style={{ marginBottom: 16, border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                📚 Curated pool
               </div>
-
-              {/* Category */}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>Category</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {CATEGORIES.map((cat) => (
-                    <button key={cat} onClick={() => setGenCategory(cat)} style={{
-                      padding: "5px 10px", borderRadius: 16,
-                      border: `1px solid ${genCategory === cat ? "var(--accent-primary)" : "var(--border)"}`,
-                      background: genCategory === cat ? "#6c63ff22" : "transparent",
-                      color: genCategory === cat ? "var(--accent-primary)" : "var(--text-secondary)",
-                      fontSize: 11, cursor: "pointer",
-                    }}>
-                      {CATEGORY_ICONS[cat]} {cat}
-                    </button>
-                  ))}
-                </div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                Questions come from <code>data/question-pool.json</code> and are loaded with{" "}
+                <code>scripts/seed-questions.ts</code>. Daily challenges are selected
+                deterministically from this pool, so every player on a given day sees the
+                same set. Review below and remove anything incorrect — a wrong answer key
+                costs players reputation they earned fairly.
               </div>
-
-              {/* Difficulty */}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>Difficulty</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {["EASY", "MEDIUM", "HARD"].map((d) => (
-                    <button key={d} onClick={() => setGenDifficulty(d)} style={{
-                      flex: 1, padding: "8px", borderRadius: 10,
-                      border: `1px solid ${genDifficulty === d ? DIFFICULTY_COLORS[d] : "var(--border)"}`,
-                      background: genDifficulty === d ? DIFFICULTY_COLORS[d] + "22" : "transparent",
-                      color: genDifficulty === d ? DIFFICULTY_COLORS[d] : "var(--text-secondary)",
-                      fontSize: 12, cursor: "pointer",
-                    }}>
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Count */}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>
-                  How many? ({genCount})
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {[5, 10, 20, 30].map((n) => (
-                    <button key={n} onClick={() => setGenCount(n)} style={{
-                      flex: 1, padding: "8px", borderRadius: 10,
-                      border: `1px solid ${genCount === n ? "var(--accent-primary)" : "var(--border)"}`,
-                      background: genCount === n ? "#6c63ff22" : "transparent",
-                      color: genCount === n ? "var(--accent-primary)" : "var(--text-secondary)",
-                      fontSize: 12, cursor: "pointer",
-                    }}>
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Topic */}
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>
-                  Topic Focus (optional)
-                </div>
-                <input
-                  value={genTopic}
-                  onChange={(e) => setGenTopic(e.target.value)}
-                  placeholder="e.g. Bitcoin, NBA playoffs, AI companies..."
-                  style={{
-                    width: "100%", background: "var(--bg-secondary)",
-                    border: "1px solid var(--border)", borderRadius: 10,
-                    padding: "10px 12px", color: "var(--text-primary)",
-                    fontSize: 13, outline: "none", fontFamily: "inherit",
-                  }}
-                />
-              </div>
-
-              {genResult && (
-                <div style={{
-                  marginBottom: 10, padding: 10, borderRadius: 8,
-                  background: genResult.startsWith("✅") ? "#00c9a711" : "#ff658411",
-                  border: `1px solid ${genResult.startsWith("✅") ? "#00c9a744" : "#ff658444"}`,
-                  fontSize: 13, color: genResult.startsWith("✅") ? "#00c9a7" : "#ff6584",
-                }}>
-                  {genResult}
-                </div>
-              )}
-
-              <button
-                className="btn-primary"
-                onClick={handleGenerate}
-                disabled={generating}
-                style={{ opacity: generating ? 0.6 : 1 }}
-              >
-                {generating ? "🤖 Generating..." : `Generate ${genCount} Questions with AI`}
-              </button>
             </div>
 
             {/* Filter */}
@@ -541,7 +424,10 @@ export default function AdminPage() {
             ) : questions.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)" }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>🧠</div>
-                <div style={{ fontSize: 14 }}>No questions yet. Use the AI generator above!</div>
+                <div style={{ fontSize: 14 }}>No questions in this category yet.</div>
+                <div style={{ fontSize: 12, marginTop: 6 }}>
+                  Run <code>npx tsx --env-file=.env.local scripts/seed-questions.ts</code>
+                </div>
               </div>
             ) : (
               questions.map((q) => (
@@ -561,6 +447,22 @@ export default function AdminPage() {
                       }}>
                         {CATEGORY_ICONS[q.category]} {q.category}
                       </span>
+                      {q.qualityScore < 0 && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+                          background: "#ff658422", color: "#ff6584",
+                        }}>
+                          QUARANTINED
+                        </span>
+                      )}
+                      {q.qualityScore >= 100 && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+                          background: "#00c9a722", color: "#00c9a7",
+                        }}>
+                          VERIFIED
+                        </span>
+                      )}
                     </div>
                     <button
                       onClick={() => handleDeleteQuestion(q.id)}

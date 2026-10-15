@@ -530,3 +530,21 @@ model EmblemMilestone {
   @@unique([emblemId, realm, level])
   @@index([achievedAt])
 }
+
+/// One challenge per UTC day per difficulty, selected from the question pool.
+///
+/// The selection is deterministic, so this row is a cache, not a source of
+/// truth — delete the table and the rotation regenerates the same challenges.
+model DailyChallenge {
+  id          String     @id @default(cuid())
+  day         DateTime   @db.Date
+  difficulty  Difficulty
+  category    Category
+  title       String
+  /// Ordered question ids. Not a relation: a question belongs to many days.
+  questionIds Json
+  createdAt   DateTime   @default(now())
+
+  @@unique([day, difficulty])
+  @@index([day])
+}
