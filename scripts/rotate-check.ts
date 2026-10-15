@@ -76,10 +76,14 @@ async function main() {
         continue;
       }
 
+      // Selection now groups by serve count, so the simulation has to hand it
+      // the real counts rather than just an ordered list of ids — passing zero
+      // for everything would degrade it to a shuffle and the numbers below
+      // would be pessimistic.
       const picked = selectQuestionIds(
         key,
         difficulty,
-        candidates.map((c) => c.id),
+        candidates.map((c) => ({ id: c.id, timesServed: served.get(c.id) ?? 0 })),
       );
       for (const id of picked) {
         seen.set(id, (seen.get(id) ?? 0) + 1);

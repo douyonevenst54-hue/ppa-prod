@@ -209,8 +209,27 @@ Current pool runway:`);
 
   const rows = readRows(file);
 
-  const existing = await prisma.question.findMany({ select: { text: true } });
-  const existingTexts = new Set(existing.map((q) => norm(q.text)));
+  // ── ONLY QUESTIONS THAT CAN ACTUALLY BE SERVED COUNT AS DUPLICATES ──────
+  //
+  // Comparing against every row meant a benched question blocked a verified
+  // one. A question awaiting review (-2) or rejected (-1) never reaches a
+  // player, so if it is the only copy of that question the question is simply
+  // absent — and skipping the hand-checked import on its account left it
+  // absent. That is the same fault as the original seeder, which preferred a
+  // generated answer over a hand-checked one because the text already existed.
+  const live = await prisma.question.findMany({
+    where: { qualityScore: { gte: 0 } },
+    select: { text: true },
+  });
+  const existingTexts = new Set(live.map((q) => norm(q.text)));
+
+  // Reported separately: these are being imported *despite* a benched twin,
+  // which is the intended outcome but worth seeing.
+  const benched = await prisma.question.findMany({
+    where: { qualityScore: { lt: 0 } },
+    select: { text: true },
+  });
+  const benchedTexts = new Set(benched.map((q) => norm(q.text)));
 
   const problems = validateIncoming(rows);
 
@@ -242,6 +261,21 @@ Current pool runway:`);
       );
     }
     if (dupes.length > 15) console.log(`    … and ${dupes.length - 15} more`);
+  }
+
+  const replacingBenched = fresh.filter((q) => benchedTexts.has(norm(q.text)));
+  if (replacingBenched.length > 0) {
+    console.log(
+      `\n  ${replacingBenched.length} of these also exist as a benched copy, which` +
+        `\n  cannot be served — importing the checked version puts the question` +
+        `\n  back into rotation:`,
+    );
+    for (const q of replacingBenched.slice(0, 10)) {
+      console.log(`    row ${String(q.row).padStart(4)}  ${q.text.slice(0, 56)}`);
+    }
+    if (replacingBenched.length > 10) {
+      console.log(`    … and ${replacingBenched.length - 10} more`);
+    }
   }
 
   if (fresh.length === 0) {
