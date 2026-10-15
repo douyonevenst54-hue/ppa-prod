@@ -45,3 +45,6 @@ next-env.d.ts
 
 # rotated API keys — never commit
 .ppa-keys-*.txt
+
+# question review working file — verdicts go to the DB, not into git
+question-review.csv
