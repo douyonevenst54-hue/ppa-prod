@@ -49,18 +49,34 @@ export default async function ChallengesPage() {
 
       <div style={{ padding: 16 }}>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
-          {[
-            { label: "Streak", value: "3 🔥" },
-            { label: "Accuracy", value: "0%" },
-            { label: "PPA Earned", value: "100" },
-          ].map((stat) => (
-            <div key={stat.label} className="card" style={{ textAlign: "center", padding: "12px 8px" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>{stat.value}</div>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{stat.label}</div>
+        {/*
+          This used to be three stat tiles reading "3 🔥", "0%" and "100" —
+          hardcoded, so every player saw the same invented streak and balance.
+          This page is a server component with no session, so it cannot show
+          real figures; the profile and wallet pages do that. A link to the
+          thing a player actually wants is worth more than a fake number.
+        */}
+        <Link href="/challenges/daily" style={{ textDecoration: "none", color: "inherit" }}>
+          <div className="card" style={{
+            marginBottom: 20,
+            background: "linear-gradient(135deg, #6c63ff22, #00c9a711)",
+            border: "1px solid #6c63ff55",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 32 }}>📅</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>
+                  Today&apos;s Challenges
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  Three tiers, new questions every day. Earn reputation to unlock
+                  the harder ones.
+                </div>
+              </div>
+              <div style={{ fontSize: 20, color: "var(--accent-primary)" }}>→</div>
             </div>
-          ))}
-        </div>
+          </div>
+        </Link>
 
         {challenges.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)" }}>
