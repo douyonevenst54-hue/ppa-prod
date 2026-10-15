@@ -118,6 +118,10 @@ model ChallengeResult {
   id          String   @id @default(cuid())
   userId      String
   questionId  String
+  /// UTC day the answer was given. The pool recycles, so a question can
+  /// legitimately come back weeks later — but not twice in the same day, which
+  /// is what the unique index below enforces.
+  day         DateTime @db.Date
   isCorrect   Boolean
   timeSeconds Int
   ppaEarned   Int      @default(0)
@@ -126,6 +130,9 @@ model ChallengeResult {
 
   question Question @relation(fields: [questionId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, questionId, day])
+  @@index([userId, day])
 }
 
 model Prediction {

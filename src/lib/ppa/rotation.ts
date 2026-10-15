@@ -19,14 +19,51 @@ import {
   Difficulty,
   categoryForDay,
   selectQuestionIds,
+  pickFromCandidates,
   challengeTitle,
   utcDateKey,
   QUESTIONS_PER_CHALLENGE,
 } from "./daily-challenge";
 
-function utcDayStart(date = new Date()): Date {
+export function utcDayStart(date = new Date()): Date {
   return new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+}
+
+/**
+ * The question set for a creator challenge that carries no questions of its own.
+ *
+ * Deterministic from (contentId, UTC date): stable for the whole day, so the
+ * submit route can recompute it and confirm a player answered the set they were
+ * served, and different tomorrow — which is the actual fix for "the same old
+ * questions". The old query was `orderBy: { qualityScore: "desc" }, take: 5`,
+ * and since every hand-checked question scores 100 that was one giant tie that
+ * returned the same five rows on every request, forever.
+ *
+ * Returns [] when the category has too few live questions to fill a challenge;
+ * the caller decides what to show rather than serving a short set.
+ */
+export async function contentQuestionSet(
+  contentId: string,
+  category: string,
+  date = new Date(),
+): Promise<string[]> {
+  const candidates = await prisma.question.findMany({
+    where: {
+      contentId: null,
+      category: category as never,
+      qualityScore: { gte: 0 },
+    },
+    orderBy: [{ timesServed: "asc" }, { id: "asc" }],
+    select: { id: true, timesServed: true },
+  });
+
+  if (candidates.length < QUESTIONS_PER_CHALLENGE) return [];
+
+  return pickFromCandidates(
+    `ppa-content:${contentId}:${utcDateKey(date)}`,
+    candidates,
   );
 }
 
@@ -86,7 +123,7 @@ export async function ensureDailyChallenges(
         qualityScore: { gte: 0 },
       },
       orderBy: [{ timesServed: "asc" }, { id: "asc" }],
-      select: { id: true },
+      select: { id: true, timesServed: true },
     });
 
     if (candidates.length < QUESTIONS_PER_CHALLENGE) {
@@ -96,11 +133,7 @@ export async function ensureDailyChallenges(
       continue;
     }
 
-    const questionIds = selectQuestionIds(
-      key,
-      difficulty,
-      candidates.map((c) => c.id),
-    );
+    const questionIds = selectQuestionIds(key, difficulty, candidates);
     const title = challengeTitle(category, difficulty);
 
     try {

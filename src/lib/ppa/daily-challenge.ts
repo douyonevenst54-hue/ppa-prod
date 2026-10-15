@@ -139,22 +139,73 @@ export function categoryForDay(
 export function selectQuestionIds(
   date: string,
   difficulty: Difficulty,
-  candidateIds: string[],
+  candidates: Candidate[],
   count = QUESTIONS_PER_CHALLENGE,
 ): string[] {
-  if (candidateIds.length <= count) return [...candidateIds];
+  return pickFromCandidates(`ppa-pick:${date}:${difficulty}`, candidates, count);
+}
 
-  // Take the least-served two-thirds, then shuffle deterministically within it.
-  const window = Math.max(count, Math.ceil(candidateIds.length * 0.67));
-  const pool = candidateIds.slice(0, window);
+/** A question in the running, with how many times it has been served. */
+export interface Candidate {
+  id: string;
+  timesServed: number;
+}
 
-  const rng = seeded(`ppa-pick:${date}:${difficulty}`);
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+/**
+ * Pick a set under an arbitrary seed, cycling the pool strictly.
+ *
+ * ── WHY SERVE COUNTS AND NOT JUST ORDER ───────────────────────────────────
+ *
+ * The first version of this took an ordered id list and shuffled the
+ * least-served two-thirds. That window only excluded the most recently served
+ * third, so a question could come back two days after being asked: across
+ * seven days of a 36-question pool it served 28 distinct questions instead of
+ * 35. Players noticed, and they were right — it was the same questions again.
+ *
+ * Grouping by serve count fixes it properly: the set is filled from the
+ * least-served group upward, so no question is asked twice until every
+ * question has been asked as often. The shuffle happens WITHIN a group, which
+ * keeps the order from being identical every time without ever reaching past
+ * questions that are still owed a turn.
+ *
+ * Callers must pass real serve counts. Passing zero for everything degrades
+ * this to a seeded shuffle of the whole pool — correct, but no longer cycling.
+ */
+export function pickFromCandidates(
+  seed: string,
+  candidates: Candidate[],
+  count = QUESTIONS_PER_CHALLENGE,
+): string[] {
+  if (candidates.length <= count) return candidates.map((c) => c.id);
+
+  const byServeCount = new Map<number, string[]>();
+  for (const c of candidates) {
+    const group = byServeCount.get(c.timesServed) ?? [];
+    group.push(c.id);
+    byServeCount.set(c.timesServed, group);
   }
 
-  return pool.slice(0, count);
+  const rng = seeded(seed);
+  const picked: string[] = [];
+
+  for (const level of [...byServeCount.keys()].sort((a, b) => a - b)) {
+    const group = byServeCount.get(level)!;
+
+    // Stable input order first, so the shuffle is reproducible regardless of
+    // the order the rows arrived in.
+    group.sort();
+    for (let i = group.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [group[i], group[j]] = [group[j], group[i]];
+    }
+
+    for (const id of group) {
+      picked.push(id);
+      if (picked.length === count) return picked;
+    }
+  }
+
+  return picked;
 }
 
 /** Short, stable id for a day's challenge in a difficulty. */

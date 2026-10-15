@@ -21,7 +21,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
-import { ensureDailyChallenges } from "@/lib/ppa/rotation";
+import { ensureDailyChallenges, utcDayStart } from "@/lib/ppa/rotation";
 import {
   tierStatus,
   unlockedDifficulties,
@@ -47,10 +47,17 @@ export async function GET(req: NextRequest) {
   const sets = await ensureDailyChallenges();
 
   // Which of today's challenges has this user already completed? A completed
-  // challenge is one where they have a result for every question in it.
+  // challenge is one where they have a result for every question in it, FROM
+  // TODAY. Without the day filter this was an all-time check, and because the
+  // pool recycles a player who met three of today's questions last week would
+  // find today's challenge marked finished before they started it.
   const allIds = sets.flatMap((s) => s.questionIds);
   const answered = await prisma.challengeResult.findMany({
-    where: { userId: session.id, questionId: { in: allIds } },
+    where: {
+      userId: session.id,
+      questionId: { in: allIds },
+      day: utcDayStart(),
+    },
     select: { questionId: true },
   });
   const answeredIds = new Set(answered.map((a) => a.questionId));

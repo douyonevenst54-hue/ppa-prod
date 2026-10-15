@@ -52,6 +52,45 @@ export const CONFIDENCE_LABELS: Record<number, string> = {
   3: 'High',
 };
 
+// ---------------------------------------------------------------------------
+// Challenges -> reputation
+// ---------------------------------------------------------------------------
+
+/**
+ * Reputation for a correct answer, by difficulty.
+ *
+ * These numbers set the pace of the whole progression, because reputation is
+ * what unlocks MEDIUM (10) and HARD (30) in daily-challenge.ts. At five
+ * questions a day a perfect EASY run is 1.0, so MEDIUM opens after about ten
+ * days of play and HARD about eight days after that.
+ *
+ * Until this existed, reputationScore was written in exactly one place in the
+ * codebase — prediction settlement — so a player who only did challenges could
+ * never leave EASY no matter how well they played.
+ *
+ * A wrong answer costs nothing. Predictions stake reputation because a
+ * prediction is a judgement you chose to make loudly, and confidence is the
+ * stake. A quiz question is a knowledge check; docking someone for not knowing
+ * something turns practice into punishment.
+ */
+export const CHALLENGE_REPUTATION: Record<string, number> = {
+  EASY: 0.2,
+  MEDIUM: 0.5,
+  HARD: 1.0,
+};
+
+export function challengeReputationDelta(
+  answers: { isCorrect: boolean; difficulty: string }[],
+): number {
+  let delta = 0;
+  for (const a of answers) {
+    if (a.isCorrect) delta += CHALLENGE_REPUTATION[a.difficulty] ?? 0;
+  }
+  // Two decimals: reputation is displayed with toFixed(1) and compared against
+  // integer thresholds, so float drift has no business accumulating here.
+  return Math.round(delta * 100) / 100;
+}
+
 /** How heavily a call at this confidence counts toward reputation. */
 export function confidenceWeight(level: number): number {
   if (level >= 3) return 4;

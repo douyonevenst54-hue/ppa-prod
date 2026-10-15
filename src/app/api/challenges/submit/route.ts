@@ -6,11 +6,28 @@
  * the fix for client-side scoring: with the old flow, anyone who opened devtools
  * could post a perfect result and mint the maximum reward.
  *
- * Reward is paid through award(), so daily caps and the ledger apply
- * automatically. The idempotency key is derived from the user and the question
- * set, so a double-tapped Submit pays once.
+ * ── THE SET HAS TO BE ONE THE APP SERVED ──────────────────────────────────
  *
- * ADAPT: getSessionUser import path.
+ * Grading honestly is not enough on its own. Without this check a player could
+ * keep five question ids whose answers they already knew and submit them again
+ * every day for a fresh payout — the idempotency key includes the date, so each
+ * day is a new key. So the submitted ids must match either today's
+ * DailyChallenge set for a tier they have unlocked, or the question set of the
+ * creator challenge they name. Both are recomputed here from the same functions
+ * that served them, so the two cannot drift apart.
+ *
+ * A creator challenge can still be replayed once a day, which is what the
+ * "Try Again" button has always offered. The per-source daily cap in policy.ts
+ * is the control for that, and it is the one designed for the job.
+ *
+ * ── ONE ANSWER PER QUESTION PER DAY ───────────────────────────────────────
+ *
+ * ChallengeResult is unique on (userId, questionId, day). Per day rather than
+ * outright, because the pool recycles and a question can legitimately return
+ * weeks later. The insert is the race guard: two taps of Submit land one row.
+ *
+ * Reward is paid through award(), so daily caps and the ledger apply
+ * automatically.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,15 +35,28 @@ import { createHash } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/lib/auth';
 import { award } from '@/lib/ppa/award';
-import { computeChallengeReward } from '@/lib/ppa/rewards';
+import {
+  computeChallengeReward,
+  challengeReputationDelta,
+} from '@/lib/ppa/rewards';
+import { contentQuestionSet, utcDayStart } from '@/lib/ppa/rotation';
+import {
+  unlockedDifficulties,
+  utcDateKey,
+  SECONDS_PER_QUESTION,
+} from '@/lib/ppa/daily-challenge';
 
 export const dynamic = 'force-dynamic';
-
-const SECONDS_PER_QUESTION = 15;
 
 interface SubmittedAnswer {
   questionId: string;
   answer: string;
+}
+
+function sameSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const bs = new Set(b);
+  return a.every((id) => bs.has(id));
 }
 
 export async function POST(req: NextRequest) {
@@ -38,11 +68,17 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
     answers?: SubmittedAnswer[];
     secondsTaken?: number;
+    contentId?: string | null;
   };
 
   const answers = body.answers ?? [];
   if (answers.length === 0 || answers.length > 20) {
     return NextResponse.json({ error: 'invalid_submission' }, { status: 400 });
+  }
+
+  const submittedIds = answers.map((a) => a.questionId);
+  if (new Set(submittedIds).size !== submittedIds.length) {
+    return NextResponse.json({ error: 'duplicate_question' }, { status: 400 });
   }
 
   const secondsAllowed = answers.length * SECONDS_PER_QUESTION;
@@ -53,27 +89,91 @@ export async function POST(req: NextRequest) {
   );
 
   const questions = await prisma.question.findMany({
-    where: { id: { in: answers.map((a) => a.questionId) } },
-    select: { id: true, correctAnswer: true },
+    where: { id: { in: submittedIds } },
+    select: {
+      id: true,
+      correctAnswer: true,
+      difficulty: true,
+      qualityScore: true,
+    },
   });
 
   if (questions.length !== answers.length) {
     return NextResponse.json({ error: 'unknown_question' }, { status: 400 });
   }
 
-  const correctById = new Map(questions.map((q) => [q.id, q.correctAnswer]));
+  // A benched question is one a person decided should not reach a player —
+  // a duplicate, a broken one, or one still awaiting review. It must not be
+  // scorable through a hand-built request either.
+  if (questions.some((q) => q.qualityScore < 0)) {
+    return NextResponse.json({ error: 'question_not_in_rotation' }, { status: 400 });
+  }
 
-  const graded = answers.map((a) => ({
-    questionId: a.questionId,
-    answer: a.answer,
-    isCorrect: correctById.get(a.questionId) === a.answer,
-  }));
-  const correct = graded.filter((g) => g.isCorrect).length;
+  const now = new Date();
+  const day = utcDayStart(now);
 
   const profile = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },
-    select: { streakDays: true, tier: true },
+    select: { streakDays: true, tier: true, reputationScore: true },
   });
+
+  /* ---- the set must be one the app actually served ---- */
+
+  const contentId = body.contentId || null;
+  let served = false;
+
+  if (contentId) {
+    const content = await prisma.content.findUnique({
+      where: { id: contentId },
+      select: { category: true, status: true, questions: { select: { id: true } } },
+    });
+
+    if (!content) {
+      return NextResponse.json({ error: 'unknown_challenge' }, { status: 404 });
+    }
+    if (content.status === 'ARCHIVED') {
+      return NextResponse.json({ error: 'challenge_closed' }, { status: 409 });
+    }
+
+    const own = content.questions.map((q) => q.id);
+    const expected =
+      own.length > 0
+        ? own
+        : await contentQuestionSet(contentId, content.category, now);
+
+    // Its own questions may number more than one sitting, so a subset is fine
+    // there; a bank-drawn set is exactly five and must match.
+    served =
+      own.length > 0
+        ? submittedIds.every((id) => expected.includes(id))
+        : sameSet(submittedIds, expected);
+  } else {
+    const todays = await prisma.dailyChallenge.findMany({ where: { day } });
+    const unlocked = new Set(unlockedDifficulties(profile.reputationScore));
+    served = todays.some(
+      (c) =>
+        unlocked.has(c.difficulty as never) &&
+        sameSet(submittedIds, c.questionIds as string[]),
+    );
+  }
+
+  if (!served) {
+    return NextResponse.json({ error: 'set_not_served' }, { status: 400 });
+  }
+
+  /* ---- grade ---- */
+
+  const byId = new Map(questions.map((q) => [q.id, q]));
+  const graded = answers.map((a) => {
+    const q = byId.get(a.questionId)!;
+    return {
+      questionId: a.questionId,
+      answer: a.answer,
+      isCorrect: q.correctAnswer === a.answer,
+      difficulty: String(q.difficulty),
+    };
+  });
+  const correct = graded.filter((g) => g.isCorrect).length;
 
   const breakdown = computeChallengeReward({
     correct,
@@ -84,47 +184,64 @@ export async function POST(req: NextRequest) {
     tier: profile.tier,
   });
 
-  // Deterministic key: same user, same question set, same day => one payout.
-  const setHash = createHash('sha256')
-    .update(
-      [user.id, new Date().toISOString().slice(0, 10), ...graded.map((g) => g.questionId).sort()].join('|'),
-    )
-    .digest('hex')
-    .slice(0, 32);
-  const idempotencyKey = `challenge:${setHash}`;
+  const reputationGain = challengeReputationDelta(graded);
+  const perQuestionPpa =
+    breakdown.total > 0 ? Math.floor(breakdown.total / graded.length) : 0;
 
-  // Persist the attempt regardless of whether the award clears the cap — the
-  // player's record is the player's record, capped or not.
-  const perQuestionPpa = breakdown.total > 0 ? Math.floor(breakdown.total / graded.length) : 0;
-  await prisma.$transaction([
-    prisma.challengeResult.createMany({
-      data: graded.map((g) => ({
-        userId: user.id,
-        questionId: g.questionId,
-        isCorrect: g.isCorrect,
-        timeSeconds: Math.round(secondsTaken / graded.length),
-        ppaEarned: g.isCorrect ? perQuestionPpa : 0,
-      })),
-      skipDuplicates: true,
-    }),
-    prisma.user.update({
-      where: { id: user.id },
-      data: {
-        totalChallenges: { increment: graded.length },
-        correctChallenges: { increment: correct },
-        lastActiveDate: new Date(),
-      },
-    }),
-    ...graded.map((g) =>
-      prisma.question.update({
-        where: { id: g.questionId },
+  /* ---- record the attempt; the unique index is the race guard ---- */
+
+  try {
+    await prisma.$transaction([
+      prisma.challengeResult.createMany({
+        data: graded.map((g) => ({
+          userId: user.id,
+          questionId: g.questionId,
+          day,
+          isCorrect: g.isCorrect,
+          timeSeconds: Math.round(secondsTaken / graded.length),
+          ppaEarned: g.isCorrect ? perQuestionPpa : 0,
+        })),
+      }),
+      prisma.user.update({
+        where: { id: user.id },
         data: {
-          timesServed: { increment: 1 },
-          timesCorrect: { increment: g.isCorrect ? 1 : 0 },
+          totalChallenges: { increment: graded.length },
+          correctChallenges: { increment: correct },
+          reputationScore: { increment: reputationGain },
+          lastActiveDate: now,
         },
       }),
-    ),
-  ]);
+      ...graded.map((g) =>
+        prisma.question.update({
+          where: { id: g.questionId },
+          data: {
+            timesServed: { increment: 1 },
+            timesCorrect: { increment: g.isCorrect ? 1 : 0 },
+          },
+        }),
+      ),
+    ]);
+  } catch (err) {
+    // P2002 on (userId, questionId, day): already answered today. The whole
+    // transaction rolled back, so no reward is owed and no counter moved.
+    // Duck-typed to match the idiom in src/lib/ledger.ts rather than importing
+    // the error class.
+    if ((err as { code?: string })?.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'already_submitted_today' },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
+
+  /* ---- pay ---- */
+
+  // Deterministic key: same user, same question set, same day => one payout.
+  const setHash = createHash('sha256')
+    .update([user.id, utcDateKey(now), ...submittedIds.slice().sort()].join('|'))
+    .digest('hex')
+    .slice(0, 32);
 
   const result =
     breakdown.total > 0
@@ -132,17 +249,19 @@ export async function POST(req: NextRequest) {
           piUserId: user.piUserId,
           amount: breakdown.total,
           source: 'CHALLENGE',
-          idempotencyKey,
+          idempotencyKey: `challenge:${setHash}`,
           allowPartial: true,
         })
-      : { ok: true, applied: 0, balance: 0, replay: false as const };
+      : { ok: true, applied: 0, balance: 0, replay: false as const, reason: undefined };
 
   const balance =
     result.balance ||
-    (await prisma.user.findUniqueOrThrow({
-      where: { id: user.id },
-      select: { ppaBalance: true },
-    })).ppaBalance;
+    (
+      await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+        select: { ppaBalance: true },
+      })
+    ).ppaBalance;
 
   return NextResponse.json({
     correct,
@@ -151,11 +270,17 @@ export async function POST(req: NextRequest) {
     breakdown: breakdown.lines,
     earned: result.applied,
     balance,
+    reputationGain,
+    reputation: Number((profile.reputationScore + reputationGain).toFixed(1)),
     // Surfaced so the results card can explain a short payout instead of
     // silently showing a number that doesn't match the breakdown.
     capped: result.applied < breakdown.total,
     cappedReason: result.reason ?? null,
     // Which answers were right, revealed only now that scoring is done.
-    graded: graded.map((g) => ({ questionId: g.questionId, isCorrect: g.isCorrect })),
+    graded: graded.map((g) => ({
+      questionId: g.questionId,
+      isCorrect: g.isCorrect,
+      correctAnswer: byId.get(g.questionId)!.correctAnswer,
+    })),
   });
 }

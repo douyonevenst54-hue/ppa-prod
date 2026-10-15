@@ -1,14 +1,34 @@
 "use client";
 
+/**
+ * Challenge play screen.
+ *
+ * ── THE CLIENT NO LONGER KNOWS THE ANSWERS ────────────────────────────────
+ *
+ * This screen used to grade each tap against `question.correctAnswer`, which
+ * meant the API had to ship the answer key to the browser. Anyone could read
+ * it before answering. Now the screen collects what was chosen, hands the set
+ * to the result screen, and the server grades and reveals.
+ *
+ * The cost is that "✓ correct!" can't appear the instant you tap — the app
+ * doesn't know yet. So a tap highlights the choice and moves on, and every
+ * answer is revealed together at the end.
+ *
+ * Answers travel in sessionStorage rather than the URL: a query string would
+ * put them in history and in any shared link, and they're too long for one.
+ */
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { stashAttempt } from "@/lib/ppa/attempt";
 
 interface Question {
   id: string;
   text: string;
   options: string[];
-  correctAnswer: string;
+  category?: string;
+  difficulty?: string;
 }
 
 interface Challenge {
@@ -19,11 +39,7 @@ interface Challenge {
   creator: { username: string };
 }
 
-const DIFFICULTY_COLORS: Record<string, string> = {
-  EASY: "#00c9a7",
-  MEDIUM: "#ffd700",
-  HARD: "#ff6584",
-};
+const SECONDS_PER_QUESTION = 15;
 
 export default function ChallengePage() {
   const router = useRouter();
@@ -31,106 +47,127 @@ export default function ChallengePage() {
   const challengeId = params.id as string;
 
   const [challenge, setChallenge] = useState<Challenge | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [started, setStarted] = useState(false);
   const [currentQ, setCurrentQ] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState(false);
-  const [results, setResults] = useState<boolean[]>([]);
-  const [timings, setTimings] = useState<number[]>([]);
-  const [timeLeft, setTimeLeft] = useState(15);
-  const [totalTime, setTotalTime] = useState(0);
+  const [locked, setLocked] = useState(false);
+  const [answers, setAnswers] = useState<{ questionId: string; answer: string }[]>([]);
+  const [timeLeft, setTimeLeft] = useState(SECONDS_PER_QUESTION);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<number>(0);
+  const questionStartRef = useRef<number>(0);
+  const runStartRef = useRef<number>(0);
 
   useEffect(() => {
-    fetchChallenge();
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const res = await fetch(`/api/challenges/${challengeId}`);
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (data.error === "not_enough_questions") {
+          setLoadError(
+            "This category doesn't have enough questions in rotation yet.",
+          );
+        } else if (data.challenge) {
+          setChallenge({
+            ...data.challenge,
+            questions: data.challenge.questions.map(
+              (q: Question & { options: unknown }) => ({
+                ...q,
+                options: Array.isArray(q.options)
+                  ? q.options
+                  : JSON.parse(q.options as string),
+              }),
+            ),
+          });
+        }
+      } catch {
+        if (!cancelled) setLoadError("Couldn't load this challenge.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [challengeId]);
 
-  async function fetchChallenge() {
-    try {
-      const res = await fetch(`/api/challenges/${challengeId}`);
-      const data = await res.json();
-      if (data.challenge) {
-        // Parse options if stored as JSON strings
-        const challenge = {
-          ...data.challenge,
-          questions: data.challenge.questions.map((q: Question & { options: unknown }) => ({
-            ...q,
-            options: Array.isArray(q.options) ? q.options : JSON.parse(q.options as string),
-          })),
-        };
-        setChallenge(challenge);
+  const advance = useCallback(
+    (questionId: string, answer: string) => {
+      if (!challenge) return;
+
+      const next = [...answers, { questionId, answer }];
+      const total = challenge.questions.length;
+
+      if (next.length >= total) {
+        const secondsTaken = Math.max(
+          1,
+          Math.round((Date.now() - runStartRef.current) / 1000),
+        );
+        // If storage is unavailable the result screen says the attempt couldn't
+        // be scored, rather than showing a score nobody was paid for.
+        stashAttempt(challengeId, {
+          answers: next,
+          secondsTaken,
+          contentId: challengeId,
+        });
+        router.push(`/challenges/${challengeId}/result`);
+        return;
       }
-    } catch (err) {
-      console.error("Failed to fetch challenge:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
 
-  const advance = useCallback((isCorrect: boolean, timeTaken: number) => {
-    const newResults = [...results, isCorrect];
-    const newTimings = [...timings, timeTaken];
-
-    if (!challenge) return;
-    const total = challenge.questions.length;
-
-    if (currentQ + 1 >= total) {
-      // Done
-      const totalT = newTimings.reduce((a, b) => a + b, 0);
-      setTotalTime(totalT);
-      const searchParams = new URLSearchParams({
-        correct: String(newResults.filter(Boolean).length),
-        total: String(total),
-        time: String(Math.round(totalT)),
-        challengeId,
-      });
-      router.push(`/challenges/${challengeId}/result?${searchParams.toString()}`);
-    } else {
-      setResults(newResults);
-      setTimings(newTimings);
-      setCurrentQ(prev => prev + 1);
+      setAnswers(next);
+      setCurrentQ(next.length);
       setSelected(null);
-      setRevealed(false);
-      setTimeLeft(15);
-      startTimeRef.current = Date.now();
-    }
-  }, [results, timings, currentQ, challenge, challengeId, router]);
+      setLocked(false);
+      setTimeLeft(SECONDS_PER_QUESTION);
+      questionStartRef.current = Date.now();
+    },
+    [answers, challenge, challengeId, router],
+  );
 
   useEffect(() => {
-    if (!started || revealed || !challenge) return;
+    if (!started || locked || !challenge) return;
 
     timerRef.current = setInterval(() => {
-      setTimeLeft(prev => {
+      setTimeLeft((prev) => {
         if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          const timeTaken = (Date.now() - startTimeRef.current) / 1000;
-          setRevealed(true);
-          setTimeout(() => advance(false, timeTaken), 1500);
+          if (timerRef.current) clearInterval(timerRef.current);
+          setLocked(true);
+          // Out of time counts as unanswered. An empty string matches no
+          // option, so the server grades it wrong.
+          const q = challenge.questions[currentQ];
+          setTimeout(() => advance(q.id, ""), 900);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
-    return () => clearInterval(timerRef.current!);
-  }, [started, currentQ, revealed, advance, challenge]);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [started, currentQ, locked, advance, challenge]);
 
   const handleSelect = (option: string) => {
-    if (revealed || !challenge) return;
-    clearInterval(timerRef.current!);
-    const timeTaken = (Date.now() - startTimeRef.current) / 1000;
+    if (locked || !challenge) return;
+    if (timerRef.current) clearInterval(timerRef.current);
     setSelected(option);
-    setRevealed(true);
-    const isCorrect = option === challenge.questions[currentQ].correctAnswer;
-    setTimeout(() => advance(isCorrect, timeTaken), 1200);
+    setLocked(true);
+    const q = challenge.questions[currentQ];
+    setTimeout(() => advance(q.id, option), 450);
   };
 
   const handleStart = () => {
     setStarted(true);
-    setTimeLeft(15);
-    startTimeRef.current = Date.now();
+    setTimeLeft(SECONDS_PER_QUESTION);
+    questionStartRef.current = Date.now();
+    runStartRef.current = Date.now();
   };
 
   if (loading) {
@@ -141,11 +178,13 @@ export default function ChallengePage() {
     );
   }
 
-  if (!challenge) {
+  if (loadError || !challenge || challenge.questions.length === 0) {
     return (
       <div style={{ padding: 16, textAlign: "center", paddingTop: 80 }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>😕</div>
-        <div style={{ marginBottom: 16 }}>Challenge not found.</div>
+        <div style={{ marginBottom: 16, fontSize: 14, color: "var(--text-secondary)" }}>
+          {loadError ?? "Challenge not found."}
+        </div>
         <Link href="/challenges" style={{ color: "var(--accent-primary)" }}>← Back</Link>
       </div>
     );
@@ -154,7 +193,7 @@ export default function ChallengePage() {
   const questions = challenge.questions;
   const total = questions.length;
   const question = questions[currentQ];
-  const progress = ((currentQ) / total) * 100;
+  const progress = (currentQ / total) * 100;
 
   // Pre-game screen
   if (!started) {
@@ -183,7 +222,7 @@ export default function ChallengePage() {
             </div>
             <div style={{ display: "flex", justifyContent: "center", gap: 16, fontSize: 14 }}>
               <span>📝 {total} Questions</span>
-              <span>⏱ 15s each</span>
+              <span>⏱ {SECONDS_PER_QUESTION}s each</span>
             </div>
           </div>
 
@@ -192,10 +231,11 @@ export default function ChallengePage() {
               HOW TO PLAY
             </div>
             {[
-              "Each question has a 15 second timer",
+              `Each question has a ${SECONDS_PER_QUESTION} second timer`,
               "Faster answers earn more PPA",
               "Your streak multiplier applies to rewards",
-              "Results and PPA are awarded instantly",
+              "Answers are revealed together at the end",
+              "Correct answers build reputation, which unlocks harder tiers",
             ].map((rule, i) => (
               <div key={i} style={{
                 display: "flex", gap: 10, alignItems: "flex-start",
@@ -243,11 +283,10 @@ export default function ChallengePage() {
             transition: "width 0.3s ease",
           }} />
         </div>
-        {/* Timer bar */}
         <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
           <div style={{
             height: "100%",
-            width: `${(timeLeft / 15) * 100}%`,
+            width: `${(timeLeft / SECONDS_PER_QUESTION) * 100}%`,
             background: timeLeft <= 5 ? "#ff6584" : timeLeft <= 10 ? "#ffd700" : "#00c9a7",
             borderRadius: 2,
             transition: "width 1s linear",
@@ -257,64 +296,54 @@ export default function ChallengePage() {
 
       <div style={{ padding: 16 }}>
 
-        {/* Question */}
         <div className="card" style={{ marginBottom: 20, minHeight: 100 }}>
           <div style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.5 }}>
             {question.text}
           </div>
         </div>
 
-        {/* Options */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {question.options.map((option, i) => {
             const isSelected = selected === option;
-            const isCorrect = option === question.correctAnswer;
-            const showResult = revealed;
-
-            let bg = "var(--bg-card)";
-            let border = "var(--border)";
-            let color = "var(--text-primary)";
-
-            if (showResult) {
-              if (isCorrect) { bg = "#00c9a722"; border = "#00c9a7"; color = "#00c9a7"; }
-              else if (isSelected && !isCorrect) { bg = "#ff658422"; border = "#ff6584"; color = "#ff6584"; }
-            } else if (isSelected) {
-              bg = "#6c63ff22"; border = "var(--accent-primary)"; color = "var(--accent-primary)";
-            }
 
             return (
               <button
                 key={i}
                 onClick={() => handleSelect(option)}
-                disabled={revealed}
+                disabled={locked}
                 style={{
                   padding: "16px", borderRadius: 12,
-                  border: `2px solid ${border}`,
-                  background: bg, color,
+                  border: `2px solid ${isSelected ? "var(--accent-primary)" : "var(--border)"}`,
+                  background: isSelected ? "#6c63ff22" : "var(--bg-card)",
+                  color: isSelected ? "var(--accent-primary)" : "var(--text-primary)",
                   fontSize: 15, fontWeight: 500,
-                  cursor: revealed ? "default" : "pointer",
+                  cursor: locked ? "default" : "pointer",
                   textAlign: "left",
                   transition: "all 0.2s",
                   display: "flex", alignItems: "center", gap: 10,
+                  opacity: locked && !isSelected ? 0.5 : 1,
                 }}
               >
                 <span style={{
                   width: 28, height: 28, borderRadius: "50%",
-                  background: showResult && isCorrect ? "#00c9a7" :
-                              showResult && isSelected && !isCorrect ? "#ff6584" :
-                              "var(--bg-secondary)",
+                  background: isSelected ? "var(--accent-primary)" : "var(--bg-secondary)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: 13, fontWeight: 700, flexShrink: 0,
-                  color: showResult && (isCorrect || (isSelected && !isCorrect)) ? "white" : "var(--text-secondary)",
+                  color: isSelected ? "white" : "var(--text-secondary)",
                 }}>
-                  {showResult && isCorrect ? "✓" :
-                   showResult && isSelected && !isCorrect ? "✗" :
-                   String.fromCharCode(65 + i)}
+                  {String.fromCharCode(65 + i)}
                 </span>
                 {option}
               </button>
             );
           })}
+        </div>
+
+        <div style={{
+          marginTop: 16, textAlign: "center",
+          fontSize: 12, color: "var(--text-secondary)",
+        }}>
+          Answers are revealed at the end
         </div>
 
       </div>

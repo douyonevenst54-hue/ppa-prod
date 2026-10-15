@@ -1,93 +1,150 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+/**
+ * Challenge result screen.
+ *
+ * Every number here comes from the server's response to the submission. The
+ * old version read `correct` and `total` out of the URL query string and
+ * rendered them, which meant the score shown was whatever the previous screen
+ * — or the address bar — claimed. It also posted that score to the API, so the
+ * reward had been asked for by the client.
+ *
+ * Now it posts the chosen answers and displays what came back: the grade, the
+ * reward breakdown, the reputation gained, and whether a daily cap shortened
+ * the payout.
+ */
+
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { apiFetch } from "@/lib/pi-session";
+import { readAttempt, clearAttempt } from "@/lib/ppa/attempt";
 
-const TIER_MULTIPLIERS: Record<string, number> = {
-  NEWCOMER: 0.8,
-  MEMBER: 1.0,
-  TRUSTED: 1.2,
-  EXPERT: 1.5,
-  ELITE: 2.0,
-};
+type RewardLine =
+  | { kind: "delta"; label: string; value: number }
+  | { kind: "multiplier"; label: string; factor: number };
 
-interface RewardBreakdown {
-  base: number;
-  speedBonus: number;
-  streakBonus: number;
-  tierBonus: number;
+interface SubmitResponse {
+  correct: number;
   total: number;
+  secondsTaken: number;
+  breakdown: RewardLine[];
+  earned: number;
+  balance: number;
+  reputationGain: number;
+  reputation: number;
+  capped: boolean;
+  cappedReason: string | null;
+  graded: { questionId: string; isCorrect: boolean; correctAnswer: string }[];
 }
 
-function ResultContent() {
-  const params = useSearchParams();
+const FRIENDLY_ERROR: Record<string, string> = {
+  already_submitted_today:
+    "You've already played this one today. Come back tomorrow for a new set.",
+  set_not_served:
+    "These questions aren't today's set, so they can't be scored.",
+  question_not_in_rotation:
+    "One of these questions has been withdrawn from rotation.",
+  challenge_closed: "This challenge has closed.",
+  unauthenticated: "Sign in with Pi to save your result.",
+};
+
+export default function ResultPage() {
+  const params = useParams();
+  const router = useRouter();
+  const challengeId = params.id as string;
   const { user, refreshUser } = useAuth();
 
-  const correct = parseInt(params.get("correct") || "0");
-  const total = parseInt(params.get("total") || "5");
-  const time = parseInt(params.get("time") || "0");
-  const challengeId = params.get("challengeId") || "";
+  const [result, setResult] = useState<SubmitResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(true);
+  const sentRef = useRef(false);
 
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [reward, setReward] = useState<RewardBreakdown | null>(null);
+  const submit = useCallback(async () => {
+    // StrictMode mounts effects twice in development; without this the second
+    // run posts the same set and gets a 409 that overwrites a good result.
+    if (sentRef.current) return;
+    sentRef.current = true;
 
-  const accuracy = Math.round((correct / total) * 100);
-  const isPerfect = correct === total;
-  const passed = correct >= Math.ceil(total / 2);
+    const stash = readAttempt(challengeId);
 
-  useEffect(() => {
-    if (!user?.id || saved || saving) return;
-    saveResults();
-  }, [user?.id]);
-
-  async function saveResults() {
-    if (!user?.id) return;
-    setSaving(true);
+    if (!stash) {
+      setError("That attempt has expired. Play the challenge again to score it.");
+      setSubmitting(false);
+      return;
+    }
 
     try {
       const res = await apiFetch("/api/challenges/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: user.id,
-          challengeId,
-          correct,
-          total,
-          timeSeconds: time,
-          streakDays: user.streakDays,
-          tier: user.tier,
+          answers: stash.answers,
+          secondsTaken: stash.secondsTaken,
+          contentId: stash.contentId,
         }),
       });
-
       const data = await res.json();
 
-      if (data.ppaEarned !== undefined) {
-        setReward({
-          base: data.baseReward || 0,
-          speedBonus: data.speedBonus || 0,
-          streakBonus: data.streakBonus || 0,
-          tierBonus: data.tierBonus || 0,
-          total: data.ppaEarned,
-        });
+      if (!res.ok) {
+        setError(FRIENDLY_ERROR[data.error] ?? "Couldn't score this attempt.");
+      } else {
+        setResult(data as SubmitResponse);
         await refreshUser();
       }
-
-      setSaved(true);
-    } catch (err) {
-      console.error("Failed to save results:", err);
+    } catch {
+      setError("Couldn't reach the server to score this attempt.");
     } finally {
-      setSaving(false);
+      // Either way the attempt is spent: it must not be replayable from
+      // storage, and it has been recorded server-side if it counted.
+      clearAttempt(challengeId);
+      setSubmitting(false);
     }
+  }, [challengeId, refreshUser]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    submit();
+  }, [user?.id, submit]);
+
+  if (submitting) {
+    return (
+      <div style={{ padding: 16, textAlign: "center", paddingTop: 80, color: "var(--text-secondary)" }}>
+        Scoring your answers...
+      </div>
+    );
   }
+
+  if (error || !result) {
+    return (
+      <div style={{ padding: 16, textAlign: "center", paddingTop: 80 }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🧾</div>
+        <div style={{ fontSize: 15, marginBottom: 20, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+          {error}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Link href="/challenges">
+            <button className="btn-primary">All Challenges</button>
+          </Link>
+          <Link href="/">
+            <button className="btn-primary" style={{ background: "transparent", border: "1px solid var(--border)" }}>
+              Back to Home
+            </button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const { correct, total, earned, breakdown, graded } = result;
+  const accuracy = Math.round((correct / total) * 100);
+  const isPerfect = correct === total;
+  const passed = correct >= Math.ceil(total / 2);
 
   return (
     <div style={{ padding: 16, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
 
-      {/* Result Header */}
       <div style={{ textAlign: "center", padding: "32px 0 24px" }}>
         <div style={{ fontSize: 64, marginBottom: 12 }}>
           {isPerfect ? "🏆" : passed ? "✅" : "📚"}
@@ -100,7 +157,6 @@ function ResultContent() {
         </div>
       </div>
 
-      {/* Score Card */}
       <div className="card" style={{ marginBottom: 16, textAlign: "center" }}>
         <div style={{
           fontSize: 56, fontWeight: 800,
@@ -110,127 +166,123 @@ function ResultContent() {
           {correct}/{total}
         </div>
         <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>
-          {accuracy}% accuracy
+          {accuracy}% accuracy · {result.secondsTaken}s
         </div>
       </div>
 
-      {/* PPA Reward Breakdown */}
+      {/* Which answers were right — revealed now, not during play */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{
-          fontSize: 13, color: "var(--text-secondary)",
-          marginBottom: 12, fontWeight: 600, letterSpacing: 1,
-        }}>
+        <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
+          YOUR ANSWERS
+        </div>
+        {graded.map((g, i) => (
+          <div key={g.questionId} style={{
+            display: "flex", gap: 10, alignItems: "flex-start",
+            padding: "8px 0",
+            borderBottom: i < graded.length - 1 ? "1px solid var(--border)" : "none",
+            fontSize: 13,
+          }}>
+            <span style={{
+              width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+              background: g.isCorrect ? "#00c9a7" : "#ff6584",
+              color: "white", fontSize: 12, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              {g.isCorrect ? "✓" : "✗"}
+            </span>
+            <span style={{ color: g.isCorrect ? "var(--text-primary)" : "var(--text-secondary)" }}>
+              Q{i + 1}
+              {!g.isCorrect && (
+                <>
+                  {" — "}
+                  <span style={{ color: "#00c9a7" }}>{g.correctAnswer}</span>
+                </>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Reward, as the server computed it */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12, fontWeight: 600, letterSpacing: 1 }}>
           PPA EARNED
         </div>
 
-        {saving && (
-          <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: 13, padding: "8px 0" }}>
-            Calculating reward...
+        {breakdown.map((line, i) => (
+          <div key={i} style={{
+            display: "flex", justifyContent: "space-between",
+            padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 14,
+          }}>
+            <span style={{ color: "var(--text-secondary)" }}>{line.label}</span>
+            <span style={{ color: "var(--accent-gold)", fontWeight: 600 }}>
+              {line.kind === "delta" ? `+${line.value} PPA` : `×${line.factor}`}
+            </span>
           </div>
-        )}
+        ))}
 
-        {reward && (
-          <>
-            {[
-              { label: "Base reward", value: `+${reward.base} PPA` },
-              { label: "Speed bonus", value: `+${reward.speedBonus} PPA` },
-              { label: `Streak bonus (${user?.streakDays || 0}🔥)`, value: `+${reward.streakBonus} PPA` },
-              { label: `Tier bonus (${user?.tier || "NEWCOMER"})`, value: `+${reward.tierBonus} PPA` },
-            ].map((row) => (
-              <div key={row.label} style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: "8px 0",
-                borderBottom: "1px solid var(--border)",
-                fontSize: 14,
-              }}>
-                <span style={{ color: "var(--text-secondary)" }}>{row.label}</span>
-                <span style={{ color: "var(--accent-gold)", fontWeight: 600 }}>{row.value}</span>
-              </div>
-            ))}
-
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "12px 0 0",
-              fontSize: 18, fontWeight: 700,
-            }}>
-              <span>Total</span>
-              <span style={{ color: "var(--accent-gold)" }}>+{reward.total} PPA</span>
-            </div>
-          </>
-        )}
-
-        {!saving && !reward && (
-          <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: 13 }}>
-            {saved ? "No PPA earned this round" : "Saving results..."}
-          </div>
-        )}
-      </div>
-
-      {/* Stats */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-          <span style={{ color: "var(--text-secondary)" }}>⏱ Time taken</span>
-          <span style={{ fontWeight: 600 }}>{time}s</span>
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          padding: "12px 0 0", fontSize: 18, fontWeight: 700,
+        }}>
+          <span>Total</span>
+          <span style={{ color: "var(--accent-gold)" }}>+{earned} PPA</span>
         </div>
+
+        {result.capped && (
+          <div style={{
+            marginTop: 12, padding: 10, borderRadius: 8,
+            background: "#ffd70011", border: "1px solid #ffd70044",
+            fontSize: 12, color: "#ffd700", lineHeight: 1.5,
+          }}>
+            Today&apos;s earning limit shortened this payout. Your score is recorded in
+            full{result.cappedReason ? ` (${result.cappedReason})` : ""}.
+          </div>
+        )}
       </div>
 
-      {/* Updated Balance */}
-      {user && reward && (
+      {result.reputationGain > 0 && (
         <div className="card" style={{
-          marginBottom: 16,
-          background: "#00c9a711",
-          border: "1px solid #00c9a744",
-          textAlign: "center",
+          marginBottom: 16, background: "#6c63ff11", border: "1px solid #6c63ff44",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+            <span style={{ color: "var(--text-secondary)" }}>⭐ Reputation</span>
+            <span style={{ fontWeight: 700, color: "var(--accent-primary)" }}>
+              +{result.reputationGain} → {result.reputation}
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.5 }}>
+            Reputation unlocks harder daily tiers. It can&apos;t be spent, sent or
+            redeemed.
+          </div>
+        </div>
+      )}
+
+      {user && (
+        <div className="card" style={{
+          marginBottom: 16, background: "#00c9a711",
+          border: "1px solid #00c9a744", textAlign: "center",
         }}>
           <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>
             New Balance
           </div>
           <div style={{ fontSize: 24, fontWeight: 700, color: "var(--accent-gold)" }}>
-            {user.ppaBalance} PPA
+            {result.balance} PPA
           </div>
         </div>
       )}
 
-      {/* Actions */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: "auto" }}>
-        <button
-          className="btn-primary"
-          onClick={() => window.location.href = `/challenges/${challengeId || "1"}`}
-        >
-          Try Again
+        <button className="btn-primary" onClick={() => router.push("/challenges")}>
+          All Challenges
         </button>
-        <Link href="/challenges">
-          <button className="btn-primary" style={{
-            background: "var(--bg-card)",
-            border: "1px solid var(--border)",
-          }}>
-            All Challenges
-          </button>
-        </Link>
         <Link href="/">
-          <button className="btn-primary" style={{
-            background: "transparent",
-            border: "1px solid var(--border)",
-          }}>
+          <button className="btn-primary" style={{ background: "transparent", border: "1px solid var(--border)" }}>
             Back to Home
           </button>
         </Link>
       </div>
 
     </div>
-  );
-}
-
-export default function ResultPage() {
-  return (
-    <Suspense fallback={
-      <div style={{ padding: 16, color: "white", textAlign: "center", paddingTop: 80 }}>
-        Loading results...
-      </div>
-    }>
-      <ResultContent />
-    </Suspense>
   );
 }
