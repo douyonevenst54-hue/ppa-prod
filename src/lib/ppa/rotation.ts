@@ -32,7 +32,8 @@ function utcDayStart(date = new Date()): Date {
 
 export interface DailySet {
   difficulty: Difficulty;
-  category: string;
+  /** Null on a mixed day. */
+  category: string | null;
   title: string;
   questionIds: string[];
 }
@@ -73,7 +74,11 @@ export async function ensureDailyChallenges(
 
     const candidates = await prisma.question.findMany({
       where: {
-        category: category as never,
+        // A mixed day (category === null) draws from every category at this
+        // difficulty, so the filter is OMITTED rather than set to null.
+        // Prisma reads `category: null` as IS NULL, which matches no rows —
+        // that silently skipped two days in three.
+        ...(category ? { category: category as never } : {}),
         difficulty: difficulty as never,
         // Quarantined questions (qualityScore -1) stay in the table as history
         // but never reach a player. This is what makes the audit's
@@ -86,7 +91,7 @@ export async function ensureDailyChallenges(
 
     if (candidates.length < QUESTIONS_PER_CHALLENGE) {
       console.warn(
-        `[rotation] ${category}/${difficulty} has only ${candidates.length} questions — skipping`,
+        `[rotation] ${category ?? "mixed"}/${difficulty} has only ${candidates.length} questions — skipping`,
       );
       continue;
     }
@@ -96,14 +101,14 @@ export async function ensureDailyChallenges(
       difficulty,
       candidates.map((c) => c.id),
     );
-    const title = challengeTitle(category as never, difficulty);
+    const title = challengeTitle(category, difficulty);
 
     try {
       const created = await prisma.dailyChallenge.create({
         data: {
           day,
           difficulty: difficulty as never,
-          category: category as never,
+          category: (category ?? null) as never,
           title,
           questionIds: questionIds as Prisma.InputJsonValue,
         },

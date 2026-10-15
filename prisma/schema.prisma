@@ -539,7 +539,8 @@ model DailyChallenge {
   id          String     @id @default(cuid())
   day         DateTime   @db.Date
   difficulty  Difficulty
-  category    Category
+  /// Null on a mixed day, which draws from every category at this difficulty.
+  category    Category?
   title       String
   /// Ordered question ids. Not a relation: a question belongs to many days.
   questionIds Json
