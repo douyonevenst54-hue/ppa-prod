@@ -11,6 +11,8 @@ import {
   unlockedDifficulties,
   challengeTitle,
   utcDateKey,
+  utcDayNumber,
+  categoryOrder,
 } from "@/lib/ppa/daily-challenge";
 import { challengeReputationDelta, CHALLENGE_REPUTATION } from "@/lib/ppa/rewards";
 
@@ -48,6 +50,39 @@ describe("categoryForDay", () => {
     expect(themed.length / results.length).toBeGreaterThan(0.2);
     expect(themed.length / results.length).toBeLessThan(0.45);
     for (const c of themed) expect(CATEGORIES).toContain(c!);
+  });
+
+  it("never repeats a theme for a tier inside six days", () => {
+    // A themed day draws from one ~13-question cell, so a theme returning
+    // quickly is what forces repeats. An independent per-day draw put General
+    // Knowledge on MEDIUM three times in nine days.
+    for (const diff of DIFFICULTIES) {
+      const lastSeen = new Map<string, number>();
+      days(400).forEach((d, i) => {
+        const cat = categoryForDay(d, diff);
+        if (!cat) return;
+        const prev = lastSeen.get(cat);
+        if (prev !== undefined) {
+          expect(i - prev, `${cat}/${diff} returned after ${i - prev} days`).toBeGreaterThanOrEqual(6);
+        }
+        lastSeen.set(cat, i);
+      });
+    }
+  });
+
+  it("gives every category a turn rather than starving some", () => {
+    for (const diff of DIFFICULTIES) {
+      const counts = new Map<string, number>();
+      for (const d of days(400)) {
+        const cat = categoryForDay(d, diff);
+        if (cat) counts.set(cat, (counts.get(cat) ?? 0) + 1);
+      }
+      // All six themed at least once, and no category taking more than twice
+      // the share of the least-themed one.
+      expect(counts.size).toBe(CATEGORIES.length);
+      const values = [...counts.values()];
+      expect(Math.max(...values)).toBeLessThanOrEqual(Math.min(...values) * 2);
+    }
   });
 
   it("does not give all three tiers the same subject every day", () => {
@@ -240,6 +275,33 @@ describe("challengeReputationDelta", () => {
 
   it("ignores an unknown difficulty rather than producing NaN", () => {
     expect(challengeReputationDelta([{ isCorrect: true, difficulty: "IMPOSSIBLE" }])).toBe(0);
+  });
+});
+
+describe("utcDayNumber / categoryOrder", () => {
+  it("counts whole UTC days and advances by one per day", () => {
+    expect(utcDayNumber("2026-10-16") - utcDayNumber("2026-10-15")).toBe(1);
+    expect(utcDayNumber("2027-01-01") - utcDayNumber("2026-01-01")).toBe(365);
+  });
+
+  it("gives each difficulty a full permutation of the categories", () => {
+    for (const diff of DIFFICULTIES) {
+      const order = categoryOrder(diff);
+      expect(order).toHaveLength(CATEGORIES.length);
+      expect(new Set(order).size).toBe(CATEGORIES.length);
+      for (const c of CATEGORIES) expect(order).toContain(c);
+    }
+  });
+
+  it("is stable across calls, so the schedule does not shift", () => {
+    for (const diff of DIFFICULTIES) {
+      expect(categoryOrder(diff)).toEqual(categoryOrder(diff));
+    }
+  });
+
+  it("does not walk all three tiers in the same order", () => {
+    const orders = DIFFICULTIES.map((d) => categoryOrder(d).join(","));
+    expect(new Set(orders).size).toBeGreaterThan(1);
   });
 });
 

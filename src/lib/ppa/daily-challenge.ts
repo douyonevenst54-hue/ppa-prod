@@ -125,7 +125,42 @@ export function categoryForDay(
 ): Category | null {
   const rng = seeded(`ppa-daily:${date}:${difficulty}`);
   if (rng() >= THEMED_DAY_RATE) return null; // mixed
-  return CATEGORIES[Math.floor(rng() * CATEGORIES.length)];
+
+  // ── EVEN ROTATION, NOT AN INDEPENDENT DRAW ──────────────────────────────
+  //
+  // This used to pick the category at random per day, which clumped: over one
+  // 14-day run General Knowledge came up three times at MEDIUM while Finance
+  // was never themed at all. A themed day draws from a single
+  // category/difficulty cell of about thirteen questions, so a theme
+  // recurring is precisely what forces repeats — those three days were fifteen
+  // draws from thirteen questions.
+  //
+  // Stepping through a fixed order by day number instead means the same theme
+  // cannot return inside six days, and every category gets its turn.
+  const order = categoryOrder(difficulty);
+  return order[utcDayNumber(date) % order.length];
+}
+
+/** Whole UTC days since the epoch. Stable, and the same for everyone. */
+export function utcDayNumber(date: string): number {
+  return Math.floor(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
+}
+
+/**
+ * The order each difficulty walks the categories in.
+ *
+ * A fixed permutation per difficulty, so the three tiers step through the
+ * subjects out of phase with each other and a themed day rarely puts all three
+ * on the same subject.
+ */
+export function categoryOrder(difficulty: Difficulty): Category[] {
+  const order = [...CATEGORIES];
+  const rng = seeded(`ppa-order:${difficulty}`);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
 }
 
 /**
