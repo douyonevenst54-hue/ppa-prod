@@ -33,7 +33,13 @@ const prisma = new PrismaClient();
 const DAYS = Number(process.argv[2] ?? 7);
 
 async function main() {
+  // Only what the live rotation can draw from. Without this filter the
+  // simulation counted benched questions — rejected, or awaiting review — as
+  // available, so it reported a pool of 345 when 234 could actually be served
+  // and was correspondingly optimistic about repeats. A tool whose only job is
+  // predicting repeats has to use the pool the app really has.
   const all = await prisma.question.findMany({
+    where: { qualityScore: { gte: 0 } },
     orderBy: [{ timesServed: "asc" }, { id: "asc" }],
     select: { id: true, text: true, category: true, difficulty: true },
   });
