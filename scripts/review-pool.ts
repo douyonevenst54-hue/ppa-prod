@@ -31,6 +31,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { writeFileSync, readFileSync } from "node:fs";
+import { parseCsv, csvRow } from "../src/lib/csv";
 
 const prisma = new PrismaClient();
 
@@ -43,71 +44,6 @@ const BENCH = args.includes("--bench");
 const EXPORT = args.includes("--export");
 const APPLY_IDX = args.indexOf("--apply");
 const APPLY_FILE = APPLY_IDX >= 0 ? args[APPLY_IDX + 1] : null;
-
-/* ------------------------------------------------------------------ */
-/* CSV                                                                 */
-/* ------------------------------------------------------------------ */
-
-function csvCell(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
-}
-
-function csvRow(cells: string[]): string {
-  return cells.map(csvCell).join(",");
-}
-
-/** Parses RFC-4180 CSV, including quoted fields with commas and newlines. */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let quoted = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-
-    if (quoted) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          cell += '"';
-          i++;
-        } else {
-          quoted = false;
-        }
-      } else if (c === "\r" && text[i + 1] === "\n") {
-        // Excel writes an embedded newline as CRLF. Keeping the \r would leave
-        // it inside the value, and a corrected_answer with a trailing \r never
-        // matches its option.
-        cell += "\n";
-        i++;
-      } else {
-        cell += c;
-      }
-      continue;
-    }
-
-    if (c === '"') {
-      quoted = true;
-    } else if (c === ",") {
-      row.push(cell);
-      cell = "";
-    } else if (c === "\n") {
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = "";
-    } else if (c !== "\r") {
-      cell += c;
-    }
-  }
-
-  if (cell !== "" || row.length > 0) {
-    row.push(cell);
-    rows.push(row);
-  }
-
-  return rows.filter((r) => r.some((c) => c.trim() !== ""));
-}
 
 function optionsOf(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map(String);
