@@ -46,7 +46,17 @@ function optionsOf(raw: unknown): string[] | null {
 }
 
 async function main() {
+  // Only questions that can actually reach a player. Reading the whole table
+  // made every quarantined row show up as a duplicate of the copy that
+  // replaced it, so the audit reported eight problems that were in fact eight
+  // fixes. An audit has to describe what players see, not what the table
+  // remembers.
+  const benched = await prisma.question.count({
+    where: { qualityScore: { lt: 0 } },
+  });
+
   const all = await prisma.question.findMany({
+    where: { qualityScore: { gte: 0 } },
     select: {
       id: true,
       text: true,
@@ -136,7 +146,8 @@ async function main() {
 
   console.log(`\nQUESTION POOL AUDIT`);
   console.log("─".repeat(70));
-  console.log(`  ${all.length} questions · ${handChecked} hand-checked · ${generated} generated\n`);
+  console.log(`  ${all.length} in rotation · ${handChecked} hand-checked · ${generated} generated`);
+  console.log(`  ${benched} benched (quarantined or awaiting review, never served)\n`);
 
   if (broken.length === 0) {
     console.log("  No structural problems.\n");
