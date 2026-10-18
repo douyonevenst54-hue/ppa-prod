@@ -48,6 +48,7 @@ model User {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   emblem             Emblem?
+  stakerStatus       StakerStatus?
 
   // --- compliance additions (2026-08) ------------------------------------
   /// When the user confirmed they meet the minimum age. Null = never asked.
@@ -555,4 +556,35 @@ model DailyChallenge {
 
   @@unique([day, difficulty])
   @@index([day])
+}
+
+/// Supporter tiers from Pi Ecosystem Directory Staking. See src/lib/ppa/staker.ts.
+enum StakerTier {
+  NONE
+  ZANMI
+  GADYEN
+  POTO_MITAN
+}
+
+/// A user's last known effective stake toward PPA, and the tier it earns.
+///
+/// A cache of Pi's Staking Data API, refreshed at most daily. The tier can sit
+/// above what the stake earns today while the grace period runs — that is what
+/// `qualifiedAt` is for. Losing this table loses only grace history.
+model StakerStatus {
+  id             String     @id @default(cuid())
+  userId         String     @unique
+  /// Pi's effective stake: amount plus a duration boost. Not a Pi balance.
+  effectiveStake Float      @default(0)
+  tier           StakerTier @default(NONE)
+  /// Last time the stake actually qualified for `tier`. Drives the grace period.
+  qualifiedAt    DateTime?
+  /// Last successful read from Pi. Null = never read.
+  checkedAt      DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tier])
 }
