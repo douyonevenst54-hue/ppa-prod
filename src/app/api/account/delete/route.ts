@@ -91,6 +91,10 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // 3. Drop staking data. User deletion is soft, so the FK cascade never fires;
+  //    a stake amount tied to a scrubbed account is still personal data.
+  await prisma.stakerStatus.deleteMany({ where: { userId: user.id } });
+
   return NextResponse.json({
     ok: true,
     message:

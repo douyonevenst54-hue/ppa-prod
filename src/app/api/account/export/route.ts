@@ -36,6 +36,14 @@ export async function GET(req: NextRequest) {
       correctChallenges: true,
       ageAttestedAt: true,
       leaderboardOptOut: true,
+      stakerStatus: {
+        select: {
+          effectiveStake: true,
+          tier: true,
+          qualifiedAt: true,
+          checkedAt: true,
+        },
+      },
       transactions: {
         select: {
           amount: true,

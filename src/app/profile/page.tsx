@@ -306,6 +306,15 @@ export default function ProfilePage() {
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-primary)" }}>Leaderboard</div>
             </div>
           </Link>
+          <Link href="/support-ppa" style={{ gridColumn: "1 / -1" }}>
+            <div className="card" style={{
+              textAlign: "center", padding: "16px 12px",
+              cursor: "pointer", border: "1px solid #00c9a744",
+            }}>
+              <div style={{ fontSize: 24, marginBottom: 6 }}>🤝</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#00c9a7" }}>Support PPA</div>
+            </div>
+          </Link>
         </div>
 
         {/* Account section */}
@@ -317,8 +326,7 @@ export default function ProfilePage() {
           ACCOUNT
         </div>
 
-         import PrivacySection from "./PrivacySection";
-
+        <PrivacySection />
 
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
