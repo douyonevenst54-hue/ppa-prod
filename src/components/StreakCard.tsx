@@ -58,14 +58,22 @@ export default function StreakCard() {
   const [streak, setStreak] = useState<StreakData | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
+  // Distinct from "streak is 0". A failed load used to render 0 Days / Best: 0,
+  // which tells someone they have lost a streak they still have.
+  const [unavailable, setUnavailable] = useState(false);
   const [message, setMessage] = useState("");
 
   const fetchStreak = useCallback(async () => {
     try {
       const res = await apiFetch("/api/streak");
-      if (res.ok) setStreak(await res.json());
+      if (res.ok) {
+        setStreak(await res.json());
+        setUnavailable(false);
+      } else {
+        setUnavailable(true);
+      }
     } catch {
-      // Signed out or offline; the card just shows its empty state.
+      setUnavailable(true);
     } finally {
       setLoading(false);
     }
@@ -123,6 +131,27 @@ export default function StreakCard() {
   // show and nothing to claim, so the card stays out of the way rather than
   // occupying a slot with a placeholder.
   if (!user?.id) return null;
+
+  if (unavailable && !streak) {
+    return (
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 14, marginBottom: 12 }}>
+          Couldn&apos;t load your streak.
+        </div>
+        <button
+          className="btn-primary"
+          style={{ background: "transparent", border: "1px solid var(--border)" }}
+          onClick={() => {
+            setUnavailable(false);
+            setLoading(true);
+            void fetchStreak();
+          }}
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
