@@ -54,7 +54,7 @@ function milestoneProgress(days: number): { next: number | null; pct: number } {
 }
 
 export default function StreakCard() {
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [streak, setStreak] = useState<StreakData | null>(null);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
@@ -72,8 +72,16 @@ export default function StreakCard() {
   }, []);
 
   useEffect(() => {
+    // Don't ask when nobody is signed in. apiFetch re-authenticates once on a
+    // 401 by calling the Pi SDK, and that call never settles without a user to
+    // answer it — so the `finally` never ran and the card sat on "Loading
+    // streak..." for the whole visit.
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     void fetchStreak();
-  }, [fetchStreak]);
+  }, [user?.id, fetchStreak]);
 
   const handleCheckIn = async () => {
     if (claiming) return;
@@ -110,6 +118,11 @@ export default function StreakCard() {
       setClaiming(false);
     }
   };
+
+  // A streak belongs to an account. With nobody signed in there is nothing to
+  // show and nothing to claim, so the card stays out of the way rather than
+  // occupying a slot with a placeholder.
+  if (!user?.id) return null;
 
   if (loading) {
     return (

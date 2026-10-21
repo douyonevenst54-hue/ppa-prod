@@ -43,6 +43,12 @@ export default function HomeClient() {
         <SignInButton />
       </div>
 
+      {/*
+        No account, no balance bar. This used to render "BALANCE 0 PPA" and a
+        Newcomer badge to anyone who opened the app, which states that a
+        visitor holds an empty wallet when in fact they hold no wallet at all.
+      */}
+      {!user ? null : (
       <div style={{
         display: "flex",
         justifyContent: "space-between",
@@ -82,6 +88,7 @@ export default function HomeClient() {
           </span>
         </div>
       </div>
+      )}
     </>
   );
 }
