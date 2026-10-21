@@ -3,6 +3,7 @@
 import { useAuth } from "@/components/AuthProvider";
 import Link from "next/link";
 import EmblemCard from "@/components/EmblemCard";
+import { TIER_RULES, TIER_ORDER } from "@/lib/ppa/tiers";
 import PrivacySection from "./PrivacySection";
 
 const TIER_COLORS: Record<string, string> = {
@@ -21,21 +22,29 @@ const TIER_LABELS: Record<string, string> = {
   ELITE: "Elite",
 };
 
-const TIER_REQUIREMENTS: Record<string, string> = {
-  NEWCOMER: "Just getting started",
-  MEMBER: "10+ predictions",
-  TRUSTED: "65%+ accuracy, 20+ predictions",
-  EXPERT: "75%+ accuracy, 30+ predictions",
-  ELITE: "85%+ accuracy, 50+ predictions",
-};
+/*
+ * Derived from TIER_RULES rather than written out again here.
+ *
+ * This map used to describe tiers as a prediction ladder — "10+ predictions",
+ * "85%+ accuracy, 50+ predictions" — while nothing in the codebase promoted
+ * anyone at all. Promotion now runs on challenge counts, so a second
+ * hardcoded copy of the requirements is exactly how the screen and the rule
+ * drift apart again.
+ */
+const TIER_REQUIREMENTS: Record<string, string> = Object.fromEntries(
+  TIER_RULES.map((r) => [
+    r.tier,
+    r.tier === "NEWCOMER"
+      ? "Just getting started"
+      : r.accuracy > 0
+        ? `${r.answered} questions answered at ${Math.round(r.accuracy * 100)}%`
+        : `${r.answered} questions answered`,
+  ]),
+);
 
-const NEXT_TIER: Record<string, string> = {
-  NEWCOMER: "MEMBER",
-  MEMBER: "TRUSTED",
-  TRUSTED: "EXPERT",
-  EXPERT: "ELITE",
-  ELITE: "ELITE",
-};
+const NEXT_TIER: Record<string, string> = Object.fromEntries(
+  TIER_ORDER.map((t, i) => [t, TIER_ORDER[Math.min(i + 1, TIER_ORDER.length - 1)]]),
+);
 
 function getStreakMultiplier(streakDays: number): string {
   if (streakDays >= 30) return "2.0×";
@@ -214,6 +223,9 @@ export default function ProfilePage() {
     </div>
   ))}
 </div>
+
+        {/* The emblem: imported into this file and never rendered until now. */}
+        <EmblemCard />
 
         {/* Tier Progress */}
         <div className="card" style={{ marginBottom: 16 }}>
