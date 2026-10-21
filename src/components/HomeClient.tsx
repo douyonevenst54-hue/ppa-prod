@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "./AuthProvider";
+import TestnetBadge from "@/components/TestnetBadge";
 import SignInButton from "@/components/SignInButton";
 
 const TIER_COLORS: Record<string, string> = {
@@ -61,8 +62,13 @@ export default function HomeClient() {
         borderBottom: "1px solid var(--border)",
       }}>
         <div>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 2 }}>
+          <div style={{
+            fontSize: 11, color: "var(--text-secondary)", marginBottom: 2,
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
             BALANCE
+            {/* Disappears by itself once NEXT_PUBLIC_PI_NETWORK=mainnet. */}
+            <TestnetBadge />
           </div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "var(--accent-gold)" }}>
             {user?.ppaBalance || 0}{" "}
