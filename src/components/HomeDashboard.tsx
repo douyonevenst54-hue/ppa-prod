@@ -59,6 +59,8 @@ interface Summary {
   reputation: number;
   tier: string;
   accuracy: number | null;
+  predictionAccuracy: number | null;
+  tierProgress: { next: string; answeredToGo: number; accuracyNeeded: number; label: string } | null;
   answered: number;
   correct: number;
   streakDays: number;
@@ -236,6 +238,13 @@ export function HomeDashboard() {
                   {data.correct} of {data.answered} right
                   {data.rank !== null && ` · ranked #${data.rank}`}
                 </div>
+                {data.tierProgress && (
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2, ...FIGURE }}>
+                    {data.tierProgress.answeredToGo > 0
+                      ? `${data.tierProgress.answeredToGo} more to reach ${titleCase(data.tierProgress.next)}`
+                      : `${titleCase(data.tierProgress.next)} at ${Math.round(data.tierProgress.accuracyNeeded * 100)}% accuracy`}
+                  </div>
+                )}
                 <div style={{ fontSize: 13, color: "var(--accent-primary)", fontWeight: 600, marginTop: 2, ...FIGURE }}>
                   {round1(data.reputation)} reputation
                 </div>
@@ -346,7 +355,7 @@ function AccuracyRing({ percent }: { percent: number }) {
         <span style={{ fontSize: 21, fontWeight: 800, letterSpacing: -0.5, ...FIGURE }}>
           {percent}%
         </span>
-        <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>accurate</span>
+        <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>on quizzes</span>
       </div>
     </div>
   );

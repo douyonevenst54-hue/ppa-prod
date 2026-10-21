@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { ensureDailyChallenges, utcDayStart } from "@/lib/ppa/rotation";
 import { tierStatus, unlockedDifficulties, utcDateKey } from "@/lib/ppa/daily-challenge";
+import { challengeAccuracy, tierProgress } from "@/lib/ppa/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
       ppaBalance: true,
       reputationScore: true,
       accuracyRate: true,
+      totalPredictions: true,
       streakDays: true,
       longestStreak: true,
       tier: true,
@@ -104,7 +106,13 @@ export async function GET(req: NextRequest) {
     where: { leaderboardOptOut: false, deletedAt: null, totalChallenges: { gt: 0 } },
     orderBy: { reputationScore: "desc" },
     take: 3,
-    select: { username: true, reputationScore: true, tier: true, accuracyRate: true },
+    select: {
+      username: true,
+      reputationScore: true,
+      tier: true,
+      totalChallenges: true,
+      correctChallenges: true,
+    },
   });
 
   const myRank =
@@ -125,9 +133,20 @@ export async function GET(req: NextRequest) {
     balance: me.ppaBalance,
     reputation: Number(me.reputationScore.toFixed(1)),
     tier: me.tier,
+    // CHALLENGE accuracy, computed from the challenge counters. The stored
+    // accuracyRate column is maintained only by prediction settlement and
+    // holds prediction accuracy — showing it beside "95 of 110 right" put a
+    // player's forecasting record next to their quiz record as one number.
+    //
     // null rather than 0 for a player who has not answered anything: an
     // accuracy of "0%" reads as a bad score, not as an absent one.
-    accuracy: me.totalChallenges > 0 ? Math.round(me.accuracyRate * 100) : null,
+    accuracy:
+      me.totalChallenges > 0
+        ? Math.round(challengeAccuracy(me.correctChallenges, me.totalChallenges) * 100)
+        : null,
+    predictionAccuracy:
+      me.totalPredictions > 0 ? Math.round(me.accuracyRate * 100) : null,
+    tierProgress: tierProgress(me.tier, me.correctChallenges, me.totalChallenges),
     answered: me.totalChallenges,
     correct: me.correctChallenges,
     streakDays: me.streakDays,
@@ -141,7 +160,7 @@ export async function GET(req: NextRequest) {
       rank: i + 1,
       username: u.username,
       reputation: Number(u.reputationScore.toFixed(1)),
-      accuracy: Math.round(u.accuracyRate * 100),
+      accuracy: Math.round(challengeAccuracy(u.correctChallenges, u.totalChallenges) * 100),
       tier: u.tier,
       isMe: u.username === me.username,
     })),

@@ -40,6 +40,7 @@ import {
   challengeReputationDelta,
 } from '@/lib/ppa/rewards';
 import { contentQuestionSet, utcDayStart } from '@/lib/ppa/rotation';
+import { nextTier } from '@/lib/ppa/tiers';
 import {
   unlockedDifficulties,
   utcDateKey,
@@ -114,7 +115,13 @@ export async function POST(req: NextRequest) {
 
   const profile = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },
-    select: { streakDays: true, tier: true, reputationScore: true },
+    select: {
+      streakDays: true,
+      tier: true,
+      reputationScore: true,
+      totalChallenges: true,
+      correctChallenges: true,
+    },
   });
 
   /* ---- the set must be one the app actually served ---- */
@@ -235,6 +242,24 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
+  /* ---- promote ---- */
+
+  // Recomputed from the totals AFTER this submission, which is why it happens
+  // here rather than inside the transaction above. Tier was previously set at
+  // signup and never again, so every player sat on the bottom rung of a
+  // five-step reward multiplier.
+  const answeredTotal = profile.totalChallenges + graded.length;
+  const correctTotal = profile.correctChallenges + correct;
+  const promotedTo = nextTier(profile.tier, correctTotal, answeredTotal);
+  const promoted = promotedTo !== profile.tier;
+
+  if (promoted) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { tier: promotedTo as never },
+    });
+  }
+
   /* ---- pay ---- */
 
   // Deterministic key: same user, same question set, same day => one payout.
@@ -272,6 +297,8 @@ export async function POST(req: NextRequest) {
     balance,
     reputationGain,
     reputation: Number((profile.reputationScore + reputationGain).toFixed(1)),
+    tier: promotedTo,
+    promoted,
     // Surfaced so the results card can explain a short payout instead of
     // silently showing a number that doesn't match the breakdown.
     capped: result.applied < breakdown.total,
