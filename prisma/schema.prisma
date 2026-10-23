@@ -75,6 +75,8 @@ model User {
   @@index([deletedAt, leaderboardOptOut])
   @@index([totalPredictions])
   @@index([reputationScore])
+
+  ecosystemSubmissions EcosystemListing[] @relation("EcosystemSubmissions")
 }
 
 model Content {
@@ -587,4 +589,47 @@ model StakerStatus {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tier])
+}
+
+
+/// Directory entry in the Pi ecosystem browser.
+///
+/// Deliberately NOT PPAApp. A PPAApp carries an apiKey that /api/external/ppa
+/// accepts to credit PPA, so being a partner is a privilege granted rarely and
+/// on purpose. Being listed in a directory is neither of those things, and if
+/// the two shared a table then approving a submission would hand out a minting
+/// key. A listing has no key and no powers.
+enum ListingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HIDDEN
+}
+
+model EcosystemListing {
+  id       String        @id @default(cuid())
+  name     String
+  slug     String        @unique
+  tagline  String
+  url      String
+  logoUrl  String?
+  category String        @default("OTHER")
+  status   ListingStatus @default(PENDING)
+
+  /// Null when an admin added the entry directly rather than reviewing one.
+  submittedById String?
+  submittedBy   User?   @relation("EcosystemSubmissions", fields: [submittedById], references: [id])
+  submittedAt   DateTime @default(now())
+
+  reviewedAt DateTime?
+  /// Pi username of the reviewer, kept as text so a deleted account does not
+  /// erase the record of who approved what.
+  reviewedBy String?
+  reviewNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, category])
+  @@index([status, name])
 }

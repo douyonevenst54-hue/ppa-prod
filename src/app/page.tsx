@@ -124,13 +124,18 @@ export default async function HomePage() {
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {[
+          {([
             { icon: "🧠", label: "Predictions", href: "/predictions", color: "#6c63ff" },
             { icon: "🎯", label: "Challenges", href: "/challenges", color: "#ff6584" },
             { icon: "🗳️", label: "Polls", href: "/polls", color: "#00c9a7" },
             { icon: "🎨", label: "Creator hub", href: "/creator", color: "#ffd700" },
-          ].map((item) => (
-            <Link key={item.href} href={item.href}>
+            { icon: "🧭", label: "Discover Pi apps", href: "/discover", color: "#00c9a7", full: true },
+          ] as { icon: string; label: string; href: string; color: string; full?: boolean }[]).map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={item.full ? { gridColumn: "1 / -1" } : undefined}
+            >
               <div className="card" style={{
                 textAlign: "center", padding: "20px 12px",
                 cursor: "pointer", borderColor: item.color + "44",
