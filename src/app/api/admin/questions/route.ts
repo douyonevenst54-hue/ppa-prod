@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-const ADMIN_PI_USERIDS = ["douyonevenst54"];
+import { getSessionUser } from "@/lib/auth";
+import { isAdminUsername } from "@/lib/admin";
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
     const category = searchParams.get("category") || "ALL";
 
-    const user = await prisma.user.findUnique({ where: { id: userId || "" } });
-    if (!user || !ADMIN_PI_USERIDS.includes(user.username)) {
+    // Identity from the bearer token, not from ?userId= — the caller does not
+    // get to nominate who it is being checked against.
+    const session = await getSessionUser(req);
+    if (!session || !isAdminUsername(session.username)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -42,11 +43,10 @@ export async function GET(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
     const questionId = searchParams.get("questionId");
 
-    const user = await prisma.user.findUnique({ where: { id: userId || "" } });
-    if (!user || !ADMIN_PI_USERIDS.includes(user.username)) {
+    const session = await getSessionUser(req);
+    if (!session || !isAdminUsername(session.username)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

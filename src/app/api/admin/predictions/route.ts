@@ -1,22 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth";
+import { isAdminUsername } from "@/lib/admin";
 
-const ADMIN_PI_USERIDS = ["douyonevenst54"];
-
-async function requireAdmin(userId: string | null) {
-  if (!userId) return null;
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user || !ADMIN_PI_USERIDS.includes(user.username)) return null;
-  return user;
-}
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-
-    const admin = await requireAdmin(userId);
-    if (!admin) {
+    // Identity from the bearer token, not from ?userId=. The local helper this
+    // replaced took the id straight from the query string, so anyone holding
+    // an admin's internal id was an admin.
+    const session = await getSessionUser(req);
+    if (!session || !isAdminUsername(session.username)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -41,11 +35,16 @@ export async function GET(req: NextRequest) {
 }
 
 // POST — create a match for people to predict on.
-// Body: { userId, sport, team1, team2, startsAt (ISO), allowDraw, rewardPool }
+// Body: { sport, team1, team2, startsAt (ISO), allowDraw, rewardPool }
+// The admin is taken from the session, not the body.
 export async function POST(req: NextRequest) {
   try {
+    const admin = await getSessionUser(req);
+    if (!admin || !isAdminUsername(admin.username)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const {
-      userId,
       sport,
       team1,
       team2,
@@ -53,11 +52,6 @@ export async function POST(req: NextRequest) {
       allowDraw = true,
       rewardPool = 0,
     } = await req.json();
-
-    const admin = await requireAdmin(userId);
-    if (!admin) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     if (!team1?.trim() || !team2?.trim() || !startsAt) {
       return NextResponse.json(

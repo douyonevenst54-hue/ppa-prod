@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth";
+import { isAdminUsername } from "@/lib/admin";
 
-const ADMIN_PI_USERIDS = ["douyonevenst54"];
+
+/** Same construction as scripts/rotate-app-keys.ts and /api/external/ppa. */
+function hashKey(key: string): string {
+  return createHash("sha256").update(key, "utf8").digest("hex");
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -50,35 +57,70 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, name, slug, description, url, category } = await req.json();
-
-    // Verify admin
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !ADMIN_PI_USERIDS.includes(user.username)) {
+    // ── THE ADMIN CHECK USED TO COME OUT OF THE REQUEST BODY ───────────────
+    //
+    // It read `userId` from the JSON, looked that user up, and checked their
+    // username against the admin list. The caller supplied the identity it
+    // was then checked against, so anyone holding an admin's internal id
+    // could register an app — and a successful POST returns an API key that
+    // /api/external/ppa accepts to credit PPA. That made this an
+    // unauthenticated route to minting, bounded only by the per-app daily
+    // budget.
+    const admin = await getSessionUser(req);
+    if (!admin || !isAdminUsername(admin.username)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Generate API key
-    const apiKey = `ppa_${slug}_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    const { name, slug, description, url, category } = await req.json();
+
+    if (!name?.trim() || !slug?.trim() || !url?.trim()) {
+      return NextResponse.json(
+        { error: "name, slug and url are required" },
+        { status: 400 },
+      );
+    }
+
+    // Slugs end up in API keys and in URLs, so keep them boring.
+    const cleanSlug = String(slug).trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(cleanSlug)) {
+      return NextResponse.json(
+        { error: "slug must be 3-40 characters, lowercase letters, numbers and hyphens" },
+        { status: 400 },
+      );
+    }
+
+    // ── KEY GENERATION ────────────────────────────────────────────────────
+    //
+    // Was `Math.random().toString(36)` plus a timestamp. Math.random is not a
+    // cryptographic generator: its output is predictable from previous
+    // outputs, and the timestamp half is simply guessable. This matches
+    // scripts/rotate-app-keys.ts so there is one way to mint a key.
+    const key = `ppa_${cleanSlug}_${randomBytes(24).toString("base64url")}`;
 
     const app = await prisma.pPAApp.create({
       data: {
-        name,
-        slug,
-        description,
-        url,
+        name: String(name).trim(),
+        slug: cleanSlug,
+        description: String(description ?? "").trim(),
+        url: String(url).trim(),
         category: category || "GENERAL",
-        apiKey,
+        // Only the hash is stored. The plaintext column holds a non-secret
+        // placeholder so its unique constraint stays satisfied and nothing
+        // can authenticate with what is in the database.
+        apiKeyHash: hashKey(key),
+        apiKey: `issued_${cleanSlug}_${Date.now()}`,
         status: "ACTIVE",
       },
+      select: { id: true, name: true, slug: true, url: true, category: true },
     });
 
-    return NextResponse.json({ app, apiKey });
+    // Returned once, here, and never recoverable afterwards.
+    return NextResponse.json({ app, apiKey: key });
   } catch (error) {
     console.error("Registry create error:", error);
     return NextResponse.json(
       { error: "Failed to register app" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
