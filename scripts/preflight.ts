@@ -14,7 +14,10 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { verifyUserChain } from "../src/lib/ledger";
+import { ensureDailyChallenges } from "../src/lib/ppa/rotation";
+import { QUESTIONS_PER_CHALLENGE } from "../src/lib/ppa/daily-challenge";
 
 const prisma = new PrismaClient();
 
@@ -118,6 +121,102 @@ async function run() {
   const attested = await prisma.user.count({ where: { ageAttestedAt: { not: null } } });
   add("INFO", "Age attestations", true, `${attested}/${users.length} users have confirmed`);
 
+  // ── 11. The daily loop can actually run ────────────────────────────────
+  //
+  // None of this existed when preflight was written, and it is now the core
+  // of the app: if the pool is thin or the rotation cannot build a set, the
+  // thing a new Pioneer opens the app to do is missing.
+
+  const liveQuestions = await prisma.question.groupBy({
+    by: ["category", "difficulty"],
+    where: { qualityScore: { gte: 0 } },
+    _count: { id: true },
+  });
+
+  const totalLive = liveQuestions.reduce((n, c) => n + c._count.id, 0);
+  add("BLOCK", "Question pool is live", totalLive >= 90,
+    `${totalLive} questions in rotation`);
+
+  // A themed day draws from ONE category/difficulty cell, so a thin cell is
+  // a day with no challenge at that tier rather than a slightly worse one.
+  const thinCells = liveQuestions.filter((c) => c._count.id < QUESTIONS_PER_CHALLENGE);
+  add("BLOCK", "Every category can fill a day", thinCells.length === 0,
+    thinCells.length === 0
+      ? "all cells hold 5+"
+      : thinCells.map((c) => `${c.category}/${c.difficulty}=${c._count.id}`).join(" "));
+
+  const perDifficulty = ["EASY", "MEDIUM", "HARD"].map((d) => ({
+    d,
+    n: liveQuestions.filter((c) => c.difficulty === d).reduce((n, c) => n + c._count.id, 0),
+  }));
+  const thinnestTier = perDifficulty.reduce((min, t) => (t.n < min.n ? t : min));
+  const runwayDays = Math.floor(thinnestTier.n / QUESTIONS_PER_CHALLENGE);
+  add("WARN", "Two weeks before repeats", runwayDays >= 14,
+    `${runwayDays} days at the thinnest tier (${thinnestTier.d})`);
+
+  const unreviewed = await prisma.question.count({
+    where: { qualityScore: { gte: 0, lt: 100 } },
+  });
+  add("WARN", "Nothing unreviewed is served", unreviewed === 0,
+    unreviewed === 0
+      ? "every live question is hand-checked"
+      : `${unreviewed} generated question(s) in rotation — scripts/review-pool.ts`);
+
+  let todaysTiers = 0;
+  try {
+    todaysTiers = (await ensureDailyChallenges()).length;
+  } catch {
+    todaysTiers = 0;
+  }
+  add("BLOCK", "Today's challenges build", todaysTiers === 3,
+    `${todaysTiers}/3 tiers available today`);
+
+  // ── 12. The rotation does not depend on the first visitor ──────────────
+  const vercelJson = existsSync("vercel.json")
+    ? readFileSync("vercel.json", "utf8")
+    : "";
+  const cronConfigured = vercelJson.includes("/api/cron/daily-challenge");
+  add("WARN", "Daily rotation cron set", cronConfigured,
+    cronConfigured
+      ? "scheduled in vercel.json"
+      : "not in vercel.json — the first visitor each day pays to build the set");
+  add("WARN", "CRON_SECRET set", Boolean(process.env.CRON_SECRET),
+    process.env.CRON_SECRET ? "set" : "missing — the cron route stays closed without it");
+
+  // ── 13. Tiers are reachable ────────────────────────────────────────────
+  const played = await prisma.user.count({ where: { totalChallenges: { gte: 25 } } });
+  const promoted = await prisma.user.count({ where: { tier: { not: "NEWCOMER" } } });
+  add("WARN", "Tiers have been awarded", played === 0 || promoted > 0,
+    played === 0
+      ? "nobody has played 25 questions yet"
+      : `${promoted} promoted of ${played} eligible — run scripts/backfill-tiers.ts`);
+
+  // ── 14. Secrets that should no longer exist ────────────────────────────
+  //
+  // Each of these belonged to something removed. A credential outliving its
+  // feature is a credential nobody is watching.
+  const retired = [
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_MODEL",
+    "WALLET_PRIVATE_SEED",
+    "APP_WALLET_ADDRESS",
+  ].filter((k) => Boolean(process.env[k]));
+  add("WARN", "Retired secrets removed", retired.length === 0,
+    retired.length === 0 ? "none present" : `still set: ${retired.join(", ")}`);
+
+  const keyFiles = existsSync(".")
+    ? readdirSync(".").filter((f) => f.startsWith(".ppa-keys-"))
+    : [];
+  add("BLOCK", "No key files on disk", keyFiles.length === 0,
+    keyFiles.length === 0 ? "none" : `delete: ${keyFiles.join(", ")}`);
+
+  // ── 15. Ecosystem directory ────────────────────────────────────────────
+  const liveListings = await prisma.ecosystemListing.count({ where: { status: "APPROVED" } });
+  const waiting = await prisma.ecosystemListing.count({ where: { status: "PENDING" } });
+  add("INFO", "Directory listings", true, `${liveListings} live, ${waiting} waiting`);
+  add("WARN", "Review queue is current", waiting === 0,
+    waiting === 0 ? "nothing waiting" : `${waiting} waiting — scripts/listings.ts pending`);
+
   // ── report ─────────────────────────────────────────────────────────────
   const pad = (s: string, n: number) => s.padEnd(n);
   console.log("\nPPA MAINNET PREFLIGHT\n" + "─".repeat(72) + "\n");
@@ -157,7 +256,9 @@ async function run() {
     - pi.toml and the validation key both point at your production domain
     - LoPiPo's environment holds the rotated key
     - .ppa-keys-*.txt is deleted from disk
-    - /terms and /privacy have been read by a Massachusetts attorney
+    - /terms, /privacy and /support-ppa read by a Massachusetts attorney
+    - the Pi directory description matches what the app actually does
+    - one full challenge played end to end in Pi Browser by a person
 `);
 
   process.exit(blockers.length > 0 ? 1 : 0);
