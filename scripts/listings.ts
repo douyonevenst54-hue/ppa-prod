@@ -65,7 +65,11 @@ async function show() {
 
   if (all.length === 0) {
     console.log(`  Nothing listed yet.\n`);
-    console.log(`  Add your own:`);
+    console.log(`  A starting point:  data/ecosystem-listings.example.json`);
+    console.log(`  Copy it, edit it, then:`);
+    console.log(`    npx tsx --env-file=.env scripts/listings.ts add --file data/my-apps.json`);
+    console.log(``);
+    console.log(`  Or add one directly:`);
     console.log(`    npx tsx --env-file=.env scripts/listings.ts add \\`);
     console.log(`      --name "LoPiPo" --tagline "What it does, in one line" \\`);
     console.log(`      --url https://lopipo.app --category MARKETPLACE --apply\n`);
@@ -238,6 +242,7 @@ Manage the ecosystem directory.
   pending              submissions waiting for review
   add --name ... --tagline ... --url ... --category ...   [--apply]
   add --file apps.json                                    [--apply]
+       (start from data/ecosystem-listings.example.json)
   approve <id>
   reject <id> "reason"
   hide <id>

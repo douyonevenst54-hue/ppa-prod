@@ -1,0 +1,20 @@
+[
+  {
+    "name": "LoPiPo",
+    "tagline": "Local Pi points for neighbourhood shops",
+    "url": "https://lopipo.app",
+    "category": "MARKETPLACE"
+  },
+  {
+    "name": "Mache Ayisyen",
+    "tagline": "REPLACE ME — one line on what it does, under 140 characters",
+    "url": "https://macheayisyen.app",
+    "category": "MARKETPLACE"
+  },
+  {
+    "name": "REPLACE ME — the app's name",
+    "tagline": "REPLACE ME — what a Pioneer gets from it, in plain words",
+    "url": "https://example.com",
+    "category": "OTHER"
+  }
+]
