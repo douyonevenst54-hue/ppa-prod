@@ -8,10 +8,12 @@ project is Testnet — the Pi directory shows the **Testnet App** badge. So
 Mainnet means a **second Developer Portal project**, not a setting change.
 That part is unavoidable.
 
-The URL is not a problem. The Testnet project is served through **PiNet**
-(Manage your app → PiNet → Active), which gives it a Pi-assigned hostname. No
-custom domain is verified against the Testnet project, so nothing has to be
-released and there is no sequencing trap. The only constraint on the domain is
+The URL is not a problem. App Info says **Hosting: Self Hosted**, URL
+`https://ppa-prod.vercel.app`, Development URL `https://pappad.app`. PiNet is
+also Active and App Studio publishes a third address,
+`https://pappadappnpn9819.pinet.com`. None of these is a verified custom domain
+in the Vercel sense, so nothing has to be released and there is no sequencing
+trap. The only constraint on the domain is
 Vercel's: `pappad.app` can live on one Vercel project at a time, so moving it
 means removing it from the Testnet project and adding it to the Mainnet one —
 a short gap in service, deliberately taken.
@@ -131,6 +133,43 @@ no way around it — worth knowing before you start, not after.
 One mitigation: keep the Testnet app alive and listed rather than deleting it.
 It remains a working demo, and the rating stays where it is.
 
+## Two doors to Mainnet, and one of them costs 30%
+
+PPA now exists on two Pi surfaces at once:
+
+| | Developer Portal project | App Studio |
+| --- | --- | --- |
+| Hosting | Self Hosted (`ppa-prod.vercel.app`) | `pappadappnpn9819.pinet.com` |
+| Wallet | Connected App Wallet `GCDP4…53AMP` | Testnet Wallet `GCHJUUW…ZC4GU` |
+| Status | Ecosystem Listing **In Review** | **Published** |
+
+The App Studio route was taken because the Developer Portal review did not move
+for months, and it worked — the app is published and reachable today. That was
+the right call for access.
+
+It carries a price that only appears on Mainnet. App Studio's Revenue Dashboard
+states it plainly:
+
+> **Testnet Apps:** You receive 100% of revenue.
+> **Mainnet Apps:** You receive 70% of the Pi generated from item sales. 30%
+> goes to Pi Network to support the App Studio platform.
+
+On Testnet this costs nothing, which is why it has not been felt. On Mainnet it
+is a permanent 30% cut of **PPA's only revenue line** — Pi paid for PPA top-ups
+at 1,000 PPA per 1 Pi. Nothing else in this app earns.
+
+**This is not yet established, and should be before choosing a route.** Two
+things are unverified: whether a Pi top-up through the Pi payment SDK counts as
+an "item sale" under that policy, and whether the split attaches to the App
+Studio project specifically or to the app however it is reached. The second
+matters most — if a self-hosted Developer Portal Mainnet project is outside the
+split, then the door PPA walks through on Mainnet day decides whether it keeps
+100% or 70% of every top-up, forever.
+
+Worth an explicit question to Pi developer support before the Mainnet project
+is created, because the network choice at registration is permanent and this is
+the most expensive decision on the list.
+
 ## A2U is not on the path to Mainnet
 
 App-to-user payments — the app sending Pi to a Pioneer — are not required for a
@@ -164,16 +203,22 @@ already going to read `/terms` — not to build first and ask about afterwards.
 If redemption itself ever becomes desirable, the order is: counsel, then
 licensing analysis, then code. Not the reverse.
 
-## The app wallet: unresolved
+## The app wallet: mostly resolved
 
-The Testnet project's "Manage your app" list has exactly three entries — Pi
-Sign-In, Ecosystem Listing, PiNet — and **no App Wallet entry**, even though
-its hosting step (PiNet) is complete and Active. So either the step is Mainnet
-only, or it appears somewhere this screen does not show. That is a useful
-narrowing: it means the Testnet project cannot be used to find out what the
-step asks for, and the answer only arrives on the Mainnet project.
+**The Testnet project already has one.** App Info → **Connected App Wallet:
+`GCDP4…53AMP`**. It is not in the "Manage your app" list, which is why reading
+that list and concluding the step did not exist was wrong — twice. The field
+lives under App Info, together with Hosting (**Self Hosted**, not PiNet — PiNet
+being Active is a separate publishing surface) and Development URL
+(`https://pappad.app`).
 
-Beyond that the public docs do not explain it:
+So the step is not a mystery and not a blocker. What remains open is narrow: a
+Mainnet project needs a Mainnet wallet, and whether the portal derives one or
+you link your KYC'd one is answered by that screen when you reach it. Jhon
+connected the current one during the App Studio move, so the mechanism is
+already something he has done once.
+
+The older uncertainty, kept because the docs still read this way:
 
 - The community guide's "Developer Wallet" section says only *"This feature is
   coming soon and will be updated once it's available."*
