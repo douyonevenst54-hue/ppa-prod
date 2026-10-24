@@ -5,7 +5,7 @@
 
 import LegalDoc, { Section } from "@/components/LegalDoc";
 
-export const metadata = { title: "Support — Pap-Pad-App" };
+export const metadata = { title: "Support — Pap Pad App" };
 
 const FAQ = [
   {

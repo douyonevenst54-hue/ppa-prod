@@ -1,6 +1,6 @@
-# Pap-Pad-App Pi Network Configuration
-name = "Pap-Pad-App"
-description = "Predict. Challenge. Earn. A skill-based prediction and challenge platform on Pi Network."
+# Pap Pad App Pi Network Configuration
+name = "Pap Pad App"
+description = "Predict. Challenge. Compete. A daily knowledge game on Pi Network."
 version = "1.0.0"
 
 [urls]

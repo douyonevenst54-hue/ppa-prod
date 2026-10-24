@@ -265,7 +265,7 @@ export default function EcosystemPage() {
                 </div>
 
                 {[
-                  { key: "name", placeholder: "Pap-Pad-App", label: "App Name" },
+                  { key: "name", placeholder: "Pap Pad App", label: "App Name" },
                   { key: "slug", placeholder: "pap-pad-app", label: "Slug (unique ID)" },
                   { key: "url", placeholder: "https://ppa-prod.vercel.app", label: "App URL" },
                 ].map((field) => (

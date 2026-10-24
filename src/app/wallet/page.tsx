@@ -262,7 +262,7 @@ export default function WalletPage() {
           textAlign: "center", lineHeight: 1.5,
         }}>
           🔒 PPA is an in-app utility token earned through skill.
-          Used exclusively within Pap-Pad-App.
+          Used exclusively within Pap Pad App.
         </div>
 
       </div>

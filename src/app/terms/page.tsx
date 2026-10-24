@@ -19,7 +19,7 @@
 import Link from "next/link";
 import LegalDoc, { Section } from "@/components/LegalDoc";
 
-export const metadata = { title: "Terms of Service — Pap-Pad-App" };
+export const metadata = { title: "Terms of Service — Pap Pad App" };
 
 export default function TermsPage() {
   return (

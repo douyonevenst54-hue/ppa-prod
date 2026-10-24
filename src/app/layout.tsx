@@ -7,8 +7,8 @@ import LegalFooter from "@/components/LegalFooter";
 import AgeGate from "@/components/AgeGate";
 
 export const metadata: Metadata = {
-  title: "Pap-Pad-App",
-  description: "Predict. Challenge. Earn.",
+  title: "Pap Pad App",
+  description: "Predict. Challenge. Compete.",
 };
 
 export default function RootLayout({

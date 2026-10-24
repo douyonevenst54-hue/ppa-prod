@@ -8,7 +8,7 @@
 
 import LegalDoc, { Section } from "@/components/LegalDoc";
 
-export const metadata = { title: "Privacy Policy — Pap-Pad-App" };
+export const metadata = { title: "Privacy Policy — Pap Pad App" };
 
 const li = { marginBottom: 6 };
 

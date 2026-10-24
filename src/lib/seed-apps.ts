@@ -7,7 +7,7 @@ async function seedApps() {
     where: { slug: "pap-pad-app" },
     update: {},
     create: {
-      name: "Pap-Pad-App",
+      name: "Pap Pad App",
       slug: "pap-pad-app",
       description: "Pi Network social prediction and Q&A platform",
       url: "https://ppa-prod.vercel.app",
