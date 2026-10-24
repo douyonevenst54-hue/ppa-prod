@@ -261,6 +261,21 @@ async function run() {
     - one full challenge played end to end in Pi Browser by a person
 `);
 
+  if (network !== "mainnet") {
+    console.log(`  Still on ${network}. Mainnet is a SECOND Developer Portal project,
+  not a setting — the network is fixed when a project is registered. See
+  MAINNET.md for the order, which matters: the Testnet project holds the
+  verified URL and has to release it before a Mainnet project can claim it.
+
+    - Testnet app moved to its own hostname and re-verified there
+    - Mainnet Developer Portal project created (network chosen at registration)
+    - production URL verified on the MAINNET project
+    - Mainnet API key generated — a testnet key makes payments fail
+    - app wallet step completed in the portal (unlocks after hosting)
+    - separate Neon database, migrated, seeded with content but no balances
+`);
+  }
+
   process.exit(blockers.length > 0 ? 1 : 0);
 }
 
