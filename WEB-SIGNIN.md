@@ -86,10 +86,37 @@ Same screen → **Redirect URIs** → Edit. Register:
 https://<your verified domain>/auth/callback
 ```
 
-**Production redirect URIs require a verified domain.** Until the domain is
-verified in the portal, Pi accepts only loopback URIs — `http://localhost:3000`,
-`127.0.0.1`, `[::1]`. That is what local development uses, so the flow is
-testable before the domain is verified.
+**Production redirect URIs require a verified domain**, and the portal is
+strict about which one. Registering a third host produced this, verbatim:
+
+> `"https://pappadappnpn9819.pinet.com/auth/callback"` — host must be
+> **ppa-prod.vercel.app** or a loopback address (`localhost`, `127.0.0.1`,
+> `[::1]`).
+
+So the allowed host is exactly the project's **verified app domain** — the URL
+shown in Developer Portal → App Info — plus loopback. Nothing else, including
+the app's own PiNet address.
+
+Registered on the Testnet project as of 2026-10-24:
+
+```
+http://localhost:3000/auth/callback
+https://ppa-prod.vercel.app/auth/callback
+```
+
+Three consequences worth keeping:
+
+- **PiNet visitors cannot sign in.** A `*.pinet.com` host cannot be a redirect
+  target, and PiNet already blocks at the point the Pi SDK is needed. So the
+  PiNet address is a read-only shop window. **The link to share for web sign-in
+  is the verified domain**, currently `https://ppa-prod.vercel.app`.
+- **Moving to `pappad.app` is a three-step change, in order:** update the app
+  URL in the portal's App configuration, let it verify, then add
+  `https://pappad.app/auth/callback` here. Changing Vercel's domain alone would
+  leave sign-in pointing at a host Pi no longer accepts.
+- **Mainnet needs its own.** A second Developer Portal project has its own
+  client ID, its own verified domain and its own redirect URIs. Register the
+  Mainnet Vercel URL there; none of this carries across.
 
 ### 3. Set the environment variable
 
