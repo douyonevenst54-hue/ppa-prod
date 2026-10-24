@@ -94,6 +94,34 @@ against Pi with `PI_API_KEY` (`resolvePiUserId` in `src/lib/auth.ts`). No
 `client_id` or `redirect_uri` appears anywhere in the codebase. Leave it empty
 on both projects unless PPA is ever opened to browsers other than Pi's.
 
+## The listing fields
+
+Written and character-counted 2026-10-24, not submitted. The Testnet
+listing was mid-review with three fields already pending, and resubmitting
+would have restarted that clock — so these wait for the review to clear, and
+for the Mainnet project, which needs the same fields filled from scratch.
+
+| Field | Limit | Value |
+| --- | --- | --- |
+| App Name | 80 | `Pap Pad App` (11) |
+| Subtitle | 30 | `Five questions a day` (20) |
+| Description | 140 | `A daily knowledge game. Five questions, the same set for everyone, three tiers of difficulty. Answer well to build reputation and rank.` (135) |
+
+Subtitle alternatives, all within 30: `A daily knowledge game` (22),
+`Daily questions for Pioneers` (28), `Knowledge game, every day` (25).
+
+**"Earn" is deliberately gone.** The live description reads
+"Predict. Challenge. Earn", which invites a Pioneer to read *earn money* —
+and PPA is an in-app credit with no cash value that cannot be converted back
+into Pi. `/terms`, the 410 on `/api/ppa/redeem` and the top-up screen all say
+so plainly; the directory description was the last surface implying otherwise.
+"Build reputation and rank" describes what a player actually gets and promises
+nothing that would have to be walked back.
+
+`Pappadapp` as a subtitle was the app's name squashed together, which tells a
+browsing Pioneer nothing — the subtitle is what shows beside the name in the
+Ecosystem apps list.
+
 ## The Mainnet database starts empty
 
 Copy the content, not the balances.
