@@ -11,6 +11,16 @@ export async function GET(req: NextRequest) {
         type: "challenge",
         status: "ACTIVE",
         endsAt: { gt: new Date() },
+        // Demo rows from src/lib/seed.ts, all created with id "seed_chal_…".
+        // Their questions are fixed and their endsAt is far enough out that
+        // they never expire, so they sat at the top of the Play tab showing
+        // the same five questions for months while the daily rotation — the
+        // thing the tab is for — changed behind a card.
+        //
+        // Hidden rather than deleted: they are still a usable demo, and
+        // deleting content a player might have answered would orphan results.
+        // scripts/retire-seed-challenges.ts can close them properly.
+        id: { not: { startsWith: "seed_chal_" } },
         ...(category !== "ALL" && { category: category as never }),
       },
       include: {

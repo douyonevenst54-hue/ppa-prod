@@ -5,7 +5,12 @@ import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
   { href: "/", icon: "🏠", label: "Home" },
-  { href: "/challenges", icon: "🎯", label: "Play" },
+  // Play goes to the daily challenge, not the /challenges index. The index
+  // led with seeded demo challenges from src/lib/seed.ts — fixed questions
+  // that never change — so the tab named Play opened the one part of the app
+  // that was frozen, while the rotation it advertises sat behind a card.
+  // `match` keeps the tab lit on the community list too.
+  { href: "/challenges/daily", match: "/challenges", icon: "🎯", label: "Play" },
   { href: "/predictions", icon: "🧠", label: "Predict" },
   { href: "/polls", icon: "🗳️", label: "Polls" },
   { href: "/profile", icon: "👤", label: "Profile" },
@@ -14,9 +19,9 @@ const NAV_ITEMS = [
 export default function BottomNav() {
   const pathname = usePathname();
 
-  const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname.startsWith(href);
+  const isActive = (item: { href: string; match?: string }) => {
+    if (item.href === "/") return pathname === "/";
+    return pathname.startsWith(item.match ?? item.href);
   };
 
   return (
@@ -36,7 +41,7 @@ export default function BottomNav() {
       zIndex: 100,
     }}>
       {NAV_ITEMS.map((item) => {
-        const active = isActive(item.href);
+        const active = isActive(item);
         return (
           <Link
             key={item.href}

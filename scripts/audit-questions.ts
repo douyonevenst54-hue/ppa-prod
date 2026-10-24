@@ -66,6 +66,7 @@ async function main() {
       difficulty: true,
       qualityScore: true,
       timesServed: true,
+      timesAnswered: true,
       timesCorrect: true,
     },
   });
@@ -115,11 +116,15 @@ async function main() {
       // Generated. Served questions with a very low success rate are the most
       // likely to have a wrong answer key — players keep "failing" a question
       // they actually got right.
-      const rate = q.timesServed > 0 ? q.timesCorrect / q.timesServed : null;
-      if (q.timesServed >= 5 && rate !== null && rate < 0.15) {
+      // Against timesAnswered, not timesServed. timesServed counts the days a
+      // question appeared in a challenge; a question served on ten days that
+      // nobody played would otherwise read as 0% correct and be flagged as a
+      // broken answer key.
+      const rate = q.timesAnswered > 0 ? q.timesCorrect / q.timesAnswered : null;
+      if (q.timesAnswered >= 5 && rate !== null && rate < 0.15) {
         suspicious.push({
           ...base,
-          reason: `only ${Math.round(rate * 100)}% correct over ${q.timesServed} serves — answer key may be wrong`,
+          reason: `only ${Math.round(rate * 100)}% correct over ${q.timesAnswered} answers — answer key may be wrong`,
         });
       }
     }

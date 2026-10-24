@@ -117,6 +117,16 @@ export async function ensureDailyChallenges(
         // that silently skipped two days in three.
         ...(category ? { category: category as never } : {}),
         difficulty: difficulty as never,
+        // Curated pool only — questions that belong to no Content row.
+        //
+        // This filter was missing, and contentQuestionSet() two functions up
+        // has always had it. Without it the official daily set could draw
+        // from any question attached to a Content row: the demo challenges in
+        // seed.ts, and anything a player publishes through the creator hub,
+        // which POST /api/challenges writes with qualityScore 7. A player
+        // could therefore put questions of their own choosing — with answers
+        // they already know — into the challenge everyone is ranked on.
+        contentId: null,
         // Quarantined questions (qualityScore -1) stay in the table as history
         // but never reach a player. This is what makes the audit's
         // --quarantine flag mean something.
@@ -146,6 +156,19 @@ export async function ensureDailyChallenges(
           questionIds: questionIds as Prisma.InputJsonValue,
         },
       });
+      // The day's set now exists, so these questions have been served. This is
+      // the only place that advances the counter the rotation sorts on, and it
+      // runs once per difficulty per day because [day, difficulty] is unique —
+      // the P2002 branch below deliberately does NOT increment, since whoever
+      // won the race already did.
+      //
+      // Doing it here rather than on submission is what makes "new questions
+      // every day" true for a tier nobody plays.
+      await prisma.question.updateMany({
+        where: { id: { in: questionIds } },
+        data: { timesServed: { increment: 1 } },
+      });
+
       out.push({
         difficulty,
         category: created.category,

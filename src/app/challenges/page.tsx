@@ -42,8 +42,10 @@ export default async function ChallengesPage() {
       }}>
         <Link href="/" style={{ color: "var(--text-secondary)", textDecoration: "none", fontSize: 20 }}>←</Link>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>🎯 Challenges</div>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Test your knowledge. Earn PPA.</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>🎯 Community challenges</div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            Written by players. The daily set lives under Play.
+          </div>
         </div>
       </div>
 

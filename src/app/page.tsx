@@ -126,7 +126,7 @@ export default async function HomePage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {([
             { icon: "🧠", label: "Predictions", href: "/predictions", color: "#6c63ff" },
-            { icon: "🎯", label: "Challenges", href: "/challenges", color: "#ff6584" },
+            { icon: "🎯", label: "Challenges", href: "/challenges/daily", color: "#ff6584" },
             { icon: "🗳️", label: "Polls", href: "/polls", color: "#00c9a7" },
             { icon: "🎨", label: "Creator hub", href: "/creator", color: "#ffd700" },
             { icon: "🧭", label: "Discover Pi apps", href: "/discover", color: "#00c9a7", full: true },

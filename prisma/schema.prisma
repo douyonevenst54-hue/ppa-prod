@@ -109,7 +109,13 @@ model Question {
   category      Category
   difficulty    Difficulty
   qualityScore  Int        @default(0)
+  /// Days this question has been put into a daily challenge. Written when the
+  /// DailyChallenge row is created, NOT when someone answers — the rotation
+  /// sorts on it, so it has to advance whether or not anyone played.
   timesServed   Int        @default(0)
+  /// Times a player actually answered it. Pairs with timesCorrect; dividing
+  /// timesCorrect by timesServed would now be meaningless.
+  timesAnswered Int        @default(0)
   timesCorrect  Int        @default(0)
   createdAt     DateTime   @default(now())
 

@@ -328,3 +328,60 @@ describe("challengeTitle / utcDateKey", () => {
     expect(utcDateKey(new Date("2026-10-14T23:59:59Z"))).toBe("2026-10-14");
   });
 });
+
+describe("rotation coverage when serve counts advance", () => {
+  // The selection is only as good as the counter it sorts on. timesServed used
+  // to be incremented in the submit route, once per answer — so a tier nobody
+  // played kept every question at zero and each day's draw was independent of
+  // the last. Measured over 30 days that let the same question return the very
+  // next day and left 16 of 78 questions never used at all.
+  //
+  // This pins the behaviour the rotation depends on: when a selected question's
+  // count advances, the pool is consumed before anything is repeated.
+  const CATS = ["GENERAL", "TECH", "FINANCE", "SOCIAL", "SPORTS", "POLITICS"];
+  const PER_CELL = 13;
+
+  function simulate(advanceOnSelection: boolean, days = 30) {
+    const pool = CATS.flatMap((cat) =>
+      Array.from({ length: PER_CELL }, (_, i) => ({ id: `${cat}-${i}`, timesServed: 0, cat })),
+    );
+    const lastSeen = new Map<string, number>();
+    let minGap = Infinity;
+
+    for (let n = 0; n < days; n++) {
+      const key = new Date(Date.UTC(2026, 9, 25 + n)).toISOString().slice(0, 10);
+      const cat = categoryForDay(key, "EASY");
+      const candidates = (cat ? pool.filter((q) => q.cat === cat) : pool)
+        .slice()
+        .sort((a, b) => a.timesServed - b.timesServed || a.id.localeCompare(b.id));
+      if (candidates.length < 5) continue;
+
+      for (const id of pickFromCandidates(`ppa-daily:${key}:EASY`, candidates, 5)) {
+        const prev = lastSeen.get(id);
+        if (prev !== undefined) minGap = Math.min(minGap, n - prev);
+        lastSeen.set(id, n);
+        if (advanceOnSelection) pool.find((q) => q.id === id)!.timesServed++;
+      }
+    }
+    return { distinct: lastSeen.size, minGap };
+  }
+
+  it("uses every question in the pool over a month", () => {
+    const { distinct } = simulate(true);
+    expect(distinct).toBe(CATS.length * PER_CELL);
+  });
+
+  it("never repeats a question on consecutive days", () => {
+    const { minGap } = simulate(true);
+    expect(minGap).toBeGreaterThan(1);
+  });
+
+  it("degrades measurably when the counter does not advance", () => {
+    // Not an endorsement — a record of what the bug cost, so that reverting
+    // the increment fails here rather than silently.
+    const broken = simulate(false);
+    const fixed = simulate(true);
+    expect(broken.distinct).toBeLessThan(fixed.distinct);
+    expect(broken.minGap).toBeLessThan(fixed.minGap);
+  });
+});

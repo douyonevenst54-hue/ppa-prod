@@ -222,7 +222,12 @@ export async function POST(req: NextRequest) {
         prisma.question.update({
           where: { id: g.questionId },
           data: {
-            timesServed: { increment: 1 },
+            // NOT timesServed. That counts days the question was put into a
+            // daily challenge and is written by the rotation when the set is
+            // built; incrementing it here made it a count of answers, which
+            // meant a tier nobody played never advanced and could serve the
+            // same five questions again the next day.
+            timesAnswered: { increment: 1 },
             timesCorrect: { increment: g.isCorrect ? 1 : 0 },
           },
         }),
