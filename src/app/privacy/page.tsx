@@ -14,15 +14,25 @@ const li = { marginBottom: 6 };
 
 export default function PrivacyPage() {
   return (
-    <LegalDoc title="Privacy Policy" updated="August 26, 2026">
+    <LegalDoc title="Privacy Policy" updated="October 24, 2026">
       <Section title="What we collect">
         <ul style={{ paddingLeft: 18 }}>
           <li style={li}>Your Pi Network user ID and username, from Pi when you sign in.</li>
           <li style={li}>
             Your activity: challenge answers and scores, predictions, poll votes,
-            streaks, PPA balance and transactions, and content you publish.
+            streaks, reputation, tier, PPA balance and transactions, and content
+            you publish.
           </li>
           <li style={li}>Your confirmation that you meet the minimum age, and when you gave it.</li>
+          <li style={li}>
+            Apps you submit to the ecosystem directory, kept with your username
+            so we know who to ask about a listing.
+          </li>
+          <li style={li}>
+            If you stake Pi toward PPA in Pi Network&apos;s Ecosystem Directory,
+            the staked amount and resulting supporter tier, read from Pi&apos;s
+            own data. We do not see your wallet or your transactions.
+          </li>
           <li style={li}>Basic technical logs needed to keep the service running.</li>
         </ul>
       </Section>
@@ -35,8 +45,10 @@ export default function PrivacyPage() {
 
       <Section title="What is public">
         Your Pi username, tier, streak, accuracy, and reputation appear on public
-        leaderboards and on your profile page, along with content you publish. You
-        can turn this off in Profile → Privacy, which removes you from all public
+        leaderboards and on your profile page, along with content you publish and
+        your emblem, which is readable by username. A directory listing you
+        submit is published under the app&apos;s name, not yours. You can turn
+        the rankings off in Profile → Privacy, which removes you from all public
         rankings.
       </Section>
 
