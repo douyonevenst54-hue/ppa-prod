@@ -48,3 +48,6 @@ next-env.d.ts
 
 # question review working file — verdicts go to the DB, not into git
 question-review.csv
+
+# the mainnet env TEMPLATE is safe to commit; the filled-in file is not
+!.env.mainnet.example
