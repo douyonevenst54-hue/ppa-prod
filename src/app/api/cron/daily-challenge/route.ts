@@ -6,10 +6,21 @@
  * builds lazily if this never runs, which is the right failure mode: a cron
  * that doesn't fire should degrade latency, not availability.
  *
- * Schedule in vercel.json:
+ * Schedule in vercel.json (now wired up; it was documented here for a long
+ * time and never actually added, so nothing ever called this route):
  *   { "crons": [{ "path": "/api/cron/daily-challenge", "schedule": "5 0 * * *" }] }
  *
- * Vercel sends CRON_SECRET as a bearer token on scheduled invocations.
+ * 00:05 UTC, just after the day boundary the selection uses. Once per day is
+ * also the Hobby plan's limit.
+ *
+ * A cron entry accepts exactly two keys, `path` and `schedule`. Vercel rejects
+ * any other property — including a "comment" — at config validation, which
+ * fails the deployment in about two seconds before the build starts. So the
+ * reasoning lives here, where a comment is legal, and not in the JSON.
+ *
+ * Vercel sends CRON_SECRET as a bearer token on scheduled invocations. Until
+ * that variable is set the route returns 401 to everything, deliberately, so
+ * the schedule is inert rather than dangerous before it exists.
  */
 
 import { NextRequest, NextResponse } from "next/server";
