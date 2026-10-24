@@ -8,16 +8,26 @@ project is Testnet — the Pi directory shows the **Testnet App** badge. So
 Mainnet means a **second Developer Portal project**, not a setting change.
 That part is unavoidable.
 
-The URL is not a problem. Pi assigns the Testnet project its own hostname, so
-`pappad.app` is not verified by it and nothing has to be released. The only
-constraint on the domain is Vercel's: `pappad.app` is currently attached to the
-Testnet Vercel project, and a domain can only live on one project at a time. So
-moving it means removing it there and adding it to the Mainnet project, which
-is a short gap in service rather than a sequencing trap.
+The URL is not a problem. The Testnet project is served through **PiNet**
+(Manage your app → PiNet → Active), which gives it a Pi-assigned hostname. No
+custom domain is verified against the Testnet project, so nothing has to be
+released and there is no sequencing trap. The only constraint on the domain is
+Vercel's: `pappad.app` can live on one Vercel project at a time, so moving it
+means removing it from the Testnet project and adding it to the Mainnet one —
+a short gap in service, deliberately taken.
 
-Confirm which URL the Testnet project actually has verified before relying on
-this — it is one line in the portal, and the whole plan below assumes it is not
-`pappad.app`.
+**One thing does follow the domain.** The Testnet Ecosystem Listing's
+*Privacy Policy URL* and *Terms of Service URL* were changed from
+`https://ppa-prod.vercel.app/{privacy,terms}` to `https://pappad.app/{privacy,terms}`
+(both pending Pi review as of 2026-10-24). Those are links in the listing, not
+a verified host — but once `pappad.app` points at the Mainnet deployment, the
+**Testnet** listing's legal links will serve the **Mainnet** deployment's pages.
+
+The text is identical, because both deployments build from this repo, so
+nothing a player reads would be wrong. It is still untidy, and the fix is one
+field: after the domain moves, set the Testnet listing's two legal URLs back to
+`https://ppa-prod.vercel.app/...`, which keeps working. Each deployment then
+links its own pages. Do this after the current review clears, not during it.
 
 Sources: [Developer Portal docs](https://pi-apps.github.io/pi-sdk-docs/platform/DeveloperPortal),
 [Community Developer Guide](https://pi-apps.github.io/community-developer-guide/docs/gettingStarted/gettingStartedChecklist/).
@@ -41,7 +51,7 @@ an environment variable:
 | `NEXT_PUBLIC_PI_NETWORK` | `testnet` | `mainnet` |
 | `PI_API_KEY` | testnet project key | **mainnet project key** |
 | `DATABASE_URL` | existing Neon database | **new Neon database** |
-| `NEXT_PUBLIC_APP_URL` | `https://testnet.pappad.app` | `https://pappad.app` |
+| `NEXT_PUBLIC_APP_URL` | `https://ppa-prod.vercel.app` | `https://pappad.app` |
 | `CRON_SECRET` | its own | its own |
 | `PPA_ADMIN_USERNAMES` | `douyonevenst54` | `douyonevenst54` |
 | `PPA_ALLOW_PLAINTEXT_KEYS` | `false` | `false` |
@@ -71,6 +81,16 @@ Developer Portal projects, two hostnames.
 
 Nothing here is irreversible except step 1, where the network choice is
 permanent for that project.
+
+**Pi Sign-In needs no Redirect URI.** The portal shows an oAuth Client ID and
+"No redirect URIs configured yet", which looks like an unfinished step and is
+not one. That client ID is for the OAuth implicit flow, used when a site signs
+a Pioneer in from *outside* Pi Browser. PPA does not use it: every session comes
+from `window.Pi.authenticate()` in the Pi SDK (`src/hooks/usePiAuth.ts`,
+`src/lib/pi-session.ts`), and the server validates the returned access token
+against Pi with `PI_API_KEY` (`resolvePiUserId` in `src/lib/auth.ts`). No
+`client_id` or `redirect_uri` appears anywhere in the codebase. Leave it empty
+on both projects unless PPA is ever opened to browsers other than Pi's.
 
 ## The Mainnet database starts empty
 
@@ -146,8 +166,14 @@ licensing analysis, then code. Not the reverse.
 
 ## The app wallet: unresolved
 
-The step exists in the Developer Portal checklist and unlocks **after** hosting
-is configured. Beyond that the public docs do not explain it:
+The Testnet project's "Manage your app" list has exactly three entries — Pi
+Sign-In, Ecosystem Listing, PiNet — and **no App Wallet entry**, even though
+its hosting step (PiNet) is complete and Active. So either the step is Mainnet
+only, or it appears somewhere this screen does not show. That is a useful
+narrowing: it means the Testnet project cannot be used to find out what the
+step asks for, and the answer only arrives on the Mainnet project.
+
+Beyond that the public docs do not explain it:
 
 - The community guide's "Developer Wallet" section says only *"This feature is
   coming soon and will be updated once it's available."*
