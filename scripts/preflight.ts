@@ -29,6 +29,63 @@ const add = (level: Level, name: string, pass: boolean, detail: string) =>
   results.push({ level, name, pass, detail });
 
 async function run() {
+  // ── 0. Schema matches the code ─────────────────────────────────────────
+  //
+  // The failure this catches: `git pull` and a Vercel deploy ship code that
+  // reads a new column, while `prisma migrate deploy` is never run against
+  // the database. Nothing fails at build time — Prisma generates the client
+  // from schema.prisma, which is correct — and nothing fails on most pages.
+  // It fails on the one write that touches the new column, and if that write
+  // is inside a transaction the whole operation rolls back.
+  //
+  // That is exactly what happened with Question.timesAnswered: the daily
+  // challenge submission wrote to it, the column did not exist, and every
+  // submission errored with no PPA awarded and no answer recorded, while the
+  // rest of the app looked healthy.
+  //
+  // Comparing the migration folders on disk against the ones the database
+  // says it has applied catches the whole class, not just that column.
+  try {
+    const onDisk = readdirSync("prisma/migrations", { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+
+    interface MigrationRow { migration_name: string; finished_at: Date | null }
+    // Annotated rather than relying on the $queryRaw generic: without a
+    // generated Prisma client that generic resolves to {} and the callbacks
+    // below become implicit any.
+    const applied = (await prisma.$queryRaw`
+      SELECT migration_name, finished_at FROM "_prisma_migrations"
+    `) as MigrationRow[];
+    const done = new Set(
+      applied
+        .filter((m: MigrationRow) => m.finished_at !== null)
+        .map((m: MigrationRow) => m.migration_name),
+    );
+
+    const pending = onDisk.filter((m) => !done.has(m));
+    add(
+      "BLOCK",
+      "Migrations applied",
+      pending.length === 0,
+      pending.length === 0
+        ? `${onDisk.length} migration(s), all applied`
+        : `${pending.length} NOT applied — run: npx prisma migrate deploy\n` +
+          pending.map((p) => `              ${p}`).join("\n"),
+    );
+  } catch (err) {
+    // No _prisma_migrations table means migrations have never been run here,
+    // which on a database that is supposed to be serving players is worse
+    // than a pending migration, not better.
+    add(
+      "BLOCK",
+      "Migrations applied",
+      false,
+      `could not read migration history — ${err instanceof Error ? err.message.split("\n")[0] : err}`,
+    );
+  }
+
   // ── 1. Ledger integrity ────────────────────────────────────────────────
   const users = await prisma.user.findMany({
     select: { piUserId: true, username: true },
