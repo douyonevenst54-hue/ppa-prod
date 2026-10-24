@@ -110,9 +110,10 @@ PPA on Mainnet was earned or bought here, and the chain proves it from zero.
 What to carry across, using tooling that already exists:
 
 ```bash
-# questions — the 234-question pool, verified and hand-checked
+# questions — the 450-question pool, 150 per difficulty, 25 per cell
 npx tsx --env-file=.env.mainnet scripts/import-questions.ts data/question-pool.json --apply
 npx tsx --env-file=.env.mainnet scripts/import-questions.ts data/question-batch-002.csv --apply
+npx tsx --env-file=.env.mainnet scripts/import-questions.ts data/question-batch-003.csv --apply
 
 # the ecosystem directory
 npx tsx --env-file=.env.mainnet scripts/listings.ts add --file data/my-apps.json --apply

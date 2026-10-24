@@ -109,7 +109,11 @@ async function main() {
 
   // Seeding runs through the existing importer so the same validation applies:
   // every answer key must be one of its options, nothing duplicated.
-  const files = ["data/question-pool.json", "data/question-batch-002.csv"];
+  const files = [
+    "data/question-pool.json",
+    "data/question-batch-002.csv",
+    "data/question-batch-003.csv",
+  ];
   for (const f of files) {
     console.log(`\n  Loading ${f} …`);
     try {
