@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { setPiAccessToken, apiFetch } from "@/lib/pi-session";
+import {
+  setPiAccessToken,
+  getPiAccessToken,
+  getSessionOrigin,
+  apiFetch,
+  type SessionOrigin,
+} from "@/lib/pi-session";
+import { startWebSignIn, webSignInConfigured } from "@/lib/web-signin";
 
 export interface PPAUser {
   id: string;
@@ -18,11 +25,18 @@ export interface PPAUser {
   correctChallenges: number;
 }
 
+/**
+ * How long to wait on Pi.authenticate() before deciding the native bridge
+ * isn't there. The SDK object exists in every browser, so this timeout — not
+ * the presence of window.Pi — is what actually distinguishes Pi Browser.
+ */
+const SDK_TIMEOUT_MS = 6000;
+
 // Add near the top of the hook file
 async function authenticateWithTimeout(
   scopes: string[],
   onIncompletePaymentFound: (p: unknown) => void,
-  ms = 15000
+  ms = SDK_TIMEOUT_MS
 ): Promise<AuthResult | null> {
   return Promise.race([
     window.Pi!.authenticate(scopes, onIncompletePaymentFound),
@@ -84,8 +98,22 @@ export function usePiAuth() {
   const [user, setUser] = useState<PPAUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [loading, setLoading] = useState(true);
+  /**
+   * How this session was obtained. Payments need the `payments` scope, which
+   * Pi Sign-In cannot grant, so every top-up entry point reads this rather
+   * than guessing from the presence of window.Pi.
+   */
+  const [origin, setOrigin] = useState<SessionOrigin | null>(null);
 
     useEffect(() => {
+    // A web session parked in sessionStorage survives a reload. Restore it
+    // before anything touches the SDK, so a signed-in web player is never
+    // sent through Pi Browser detection they cannot pass.
+    const restored = getPiAccessToken();
+    if (restored && getSessionOrigin() === "web") {
+      setOrigin("web");
+    }
+
     const cached = localStorage.getItem("ppa_user");
     if (cached) {
       try {
@@ -116,17 +144,42 @@ export function usePiAuth() {
   }, []);
   
   /**
-   * Initialize Pi SDK and authenticate the user automatically on app load.
-   * Detects Pi Browser by waiting for window.Pi to appear (the SDK is only
-   * injected in Pi Browser). Falls through to public mode after 6 seconds
-   * if the SDK never appears.
+   * Try to sign in through the Pi SDK, then fall back to public mode.
+   *
+   * ── WHY THE OLD TIMINGS WERE WRONG ────────────────────────────────────
+   *
+   * This used to wait up to 6 seconds for window.Pi to appear, "because the
+   * SDK is only injected in Pi Browser". It isn't. layout.tsx loads
+   * sdk.minepi.com/pi-sdk.js in every browser, so window.Pi appears almost
+   * immediately on an ordinary desktop too — the object is there, the native
+   * bridge behind it is not. The poll therefore succeeded, authenticate() was
+   * called against nothing, and the real wait was the 15-second timeout
+   * underneath it.
+   *
+   * Fifteen seconds of "Connecting to Pi Network..." is what every visitor
+   * arriving from a link outside Pi saw before being told to use a different
+   * browser. Most of them left during it.
+   *
+   * Now: a short poll, a short authenticate timeout, and — in
+   * PiBrowserBanner — the app renders while this runs instead of holding a
+   * full-screen loader in front of it. Someone who lands here sees PPA, and
+   * signs in when they choose to.
    */
   async function initPiAuth() {
     try {
+      // A restored web session needs no SDK and must not be sent looking for
+      // one; it is already signed in, or its token has expired and the fix is
+      // another Pi Sign-In round trip, not Pi Browser.
+      if (getSessionOrigin() === "web") {
+        setStatus("public");
+        setLoading(false);
+        return;
+      }
+
       let attempts = 0;
-      const maxAttempts = 20; // 20 × 300ms = 6 seconds
+      const maxAttempts = 8; // 8 × 150ms = 1.2 seconds
       while (!window.Pi && attempts < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 300));
+        await new Promise((r) => setTimeout(r, 150));
         attempts++;
       }
 
@@ -145,29 +198,29 @@ export function usePiAuth() {
         })
       );
 
-      // Race authenticate against a 15-second timeout so regular browsers
-      // that load the SDK script don't hang on a missing native bridge.
+      // The SDK object exists in every browser. Only a returned authenticate
+      // call proves the bridge behind it is real, so this races a timeout
+      // short enough that a visitor outside Pi Browser is not kept waiting.
       const authResult = await Promise.race([
         window.Pi.authenticate(
           PI_SCOPES,
           onIncompletePaymentFound
         ),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), SDK_TIMEOUT_MS)),
       ]);
 
       if (!authResult) {
-        console.warn(
-          "[usePiAuth] Pi.authenticate() timed out, falling back to public mode"
-        );
         setStatus("public");
         setLoading(false);
         return;
       }
 
-      await signInWithPi(authResult);
+      await signInWithPi(authResult, "pi-browser");
       setStatus("authenticated");
-    } catch (err) {
-      console.error("[usePiAuth] auth error:", err);
+    } catch {
+      // Not an error worth logging: outside Pi Browser this is the normal
+      // path, and a console error on every ordinary visit is noise that
+      // hides the real ones.
       setStatus("public");
     } finally {
       setLoading(false);
@@ -205,7 +258,7 @@ export function usePiAuth() {
    * via GET https://api.minepi.com/v2/me and is the only source of
    * truth for the resolved user record.
    */
-  async function signInWithPi(authResult: AuthResult) {
+  async function signInWithPi(authResult: AuthResult, how: SessionOrigin) {
     const res = await fetch("/api/auth/pi", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -230,21 +283,70 @@ export function usePiAuth() {
     // The token was previously sent to /api/auth/pi and then discarded, so
     // nothing could authenticate afterwards. Every route now resolves the user
     // from this token; apiFetch() reads it from here.
-    setPiAccessToken(authResult.accessToken);
+    setPiAccessToken(authResult.accessToken, how);
+    setOrigin(how);
 
     setUser(data.user);
     cacheIdentity(data.user);
   }
 
   /**
+   * Send the browser to Pi to sign in. Returns only in the failure case —
+   * on success the page is replaced by Pi's, and /auth/callback finishes the
+   * job when it comes back.
+   */
+  const signInWithWeb = useCallback((returnTo?: string) => {
+    startWebSignIn(returnTo);
+  }, []);
+
+  /**
+   * Finish a Pi Sign-In round trip.
+   *
+   * Called by /auth/callback with the token read out of the URL fragment.
+   * It goes through the same /api/auth/pi the SDK path uses — the server
+   * validates both the same way, against GET api.minepi.com/v2/me, so there
+   * is one identity path and not two.
+   *
+   * Doing this through the hook rather than inside the callback screen is
+   * what keeps the session live: the screen writing to localStorage would
+   * leave AuthProvider, already mounted, still believing nobody is signed in.
+   */
+  const completeWebSignIn = useCallback(async (accessToken: string, username?: string) => {
+    setLoading(true);
+    try {
+      await signInWithPi(
+        { accessToken, user: { uid: "", username: username ?? "" } },
+        "web",
+      );
+      setStatus("authenticated");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
    * Manual sign-in trigger. Used by the visible "Sign in with Pi" button
    * (required by Pi App Studio's verification flow, which waits for an
    * explicit Pi.authenticate call after the page loads).
+   *
+   * Tries the SDK first and falls through to the Pi Sign-In redirect when it
+   * doesn't answer. The order matters: inside Pi Browser the SDK is one tap
+   * and no page change, so sending a Pioneer who is already signed in to Pi
+   * out to accounts.pinet.com would be the worse flow. Outside Pi Browser the
+   * SDK object still exists but never answers, which is what the timeout is
+   * for — and the redirect is then a real way in rather than an apology.
    */
+  const fallbackToWeb = useCallback((): boolean => {
+    if (!webSignInConfigured()) return false;
+    startWebSignIn();
+    return true;
+  }, []);
+
   const signIn = useCallback(async () => {
   setLoading(true);
   try {
     if (!window.Pi) {
+      if (fallbackToWeb()) return;
       setStatus("public");
       return;
     }
@@ -262,19 +364,23 @@ export function usePiAuth() {
     );
 
     if (!authResult) {
+      // The SDK object was present but nothing answered — an ordinary browser
+      // that loaded pi-sdk.js, not Pi Browser. Offer the door that works.
+      if (fallbackToWeb()) return;
       alert("Pi sign-in timed out. Please close and reopen the app, then try again.");
       return;
     }
 
-    await signInWithPi(authResult);
+    await signInWithPi(authResult, "pi-browser");
     setStatus("authenticated");
   } catch (err) {
     console.error("[usePiAuth] manual signIn failed:", err);
+    if (fallbackToWeb()) return;
     alert("Sign-in failed. Please try again.");
   } finally {
     setLoading(false);
   }
-}, []);
+}, [fallbackToWeb]);
 
   /**
    * Cache identity only — never the balance.
@@ -328,6 +434,7 @@ export function usePiAuth() {
       // non-fatal
     }
     setPiAccessToken(null);
+    setOrigin(null);
     setUser(null);
     setStatus("public");
   }
@@ -353,7 +460,7 @@ export function usePiAuth() {
         PI_SCOPES,
         onIncompletePaymentFound
       );
-      await signInWithPi(auth);
+      await signInWithPi(auth, "pi-browser");
       setStatus("authenticated");
     } catch (err) {
       console.error("Force reauth failed:", err);
@@ -361,5 +468,22 @@ export function usePiAuth() {
     }
   }
 
-  return { user, status, loading, signIn, signOut, forceReauth, updateUser, refreshUser };
+  return {
+    user,
+    status,
+    loading,
+    /** How this session was obtained; null when nobody is signed in. */
+    origin,
+    /** True when Pi payments are possible — i.e. the session came from Pi Browser. */
+    canPay: origin === "pi-browser",
+    /** True when this deployment has a Pi Sign-In client ID configured. */
+    webSignInAvailable: webSignInConfigured(),
+    signIn,
+    signInWithWeb,
+    completeWebSignIn,
+    signOut,
+    forceReauth,
+    updateUser,
+    refreshUser,
+  };
 }

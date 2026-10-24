@@ -23,7 +23,7 @@ const IS_TESTNET = process.env.NEXT_PUBLIC_PI_NETWORK !== "mainnet";
 type Status = "idle" | "paying" | "done" | "error";
 
 export default function TopUpPanel() {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, canPay, origin } = useAuth();
   const [selected, setSelected] = useState(1);
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
@@ -31,6 +31,15 @@ export default function TopUpPanel() {
   const ppaAmount = Math.round(selected * PI_TO_PPA);
 
   async function startTopUp() {
+    // Belt as well as braces: the amount buttons are not rendered for a web
+    // session, so this should be unreachable. It stays because the cost of
+    // being wrong is a player who thinks they paid.
+    if (origin === "web") {
+      setStatus("error");
+      setMessage("Buying PPA with Pi needs Pi Browser.");
+      return;
+    }
+
     const Pi = window.Pi;
     if (!Pi) {
       setStatus("error");
@@ -121,6 +130,29 @@ export default function TopUpPanel() {
         <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>PPA</div>
       </div>
 
+      {/* ── A WEB SESSION CANNOT BUY, AND IS TOLD SO BEFORE CHOOSING ──────
+          Pi Sign-In grants `username` only; `payments` is not a scope it can
+          issue. Showing the amount buttons and failing at the end would mean
+          letting someone pick a number and press a button that was never
+          going to work. */}
+      {origin === "web" ? (
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>
+            Top-ups happen in Pi Browser
+          </div>
+          <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.65, marginBottom: 12 }}>
+            You&apos;re signed in with Pi on the web, which lets you play the daily
+            challenge, earn PPA and climb the leaderboard. Paying with Pi needs a
+            permission that web sign-in can&apos;t grant, so buying PPA happens in Pi
+            Browser.
+          </p>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            Open PPA in Pi Browser with the same Pi account — it&apos;s the same
+            balance and the same streak.
+          </p>
+        </div>
+      ) : (
+      <>
       {/* Amount */}
       <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 10, fontWeight: 600, letterSpacing: 1 }}>
         CHOOSE AN AMOUNT
@@ -229,6 +261,8 @@ export default function TopUpPanel() {
           .
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

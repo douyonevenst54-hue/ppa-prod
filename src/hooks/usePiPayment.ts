@@ -1,5 +1,5 @@
 "use client";
-import { apiFetch } from "@/lib/pi-session";
+import { apiFetch, getSessionOrigin } from "@/lib/pi-session";
 
 interface PaymentOptions {
   amount: number;
@@ -44,6 +44,22 @@ export function usePiPayment() {
       onCancel,
       onError,
     } = options;
+
+    // A web session cannot pay, and this is the one place that knows it
+    // before anything visible happens. Pi Sign-In issues `username` only —
+    // `payments` is not among the scopes it can grant — so createPayment
+    // would be refused after the player had already committed to a purchase.
+    //
+    // Checked before ensurePiReady() deliberately: that helper polls for
+    // window.Pi, which exists in every browser, so it would spend nine
+    // seconds succeeding at the wrong question.
+    if (getSessionOrigin() === "web") {
+      onError?.(
+        "Buying PPA with Pi needs Pi Browser. You're signed in through the web, " +
+          "which can play and earn but can't make Pi payments.",
+      );
+      return;
+    }
 
     const ready = await ensurePiReady();
 
