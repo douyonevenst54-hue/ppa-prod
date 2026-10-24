@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { apiFetch } from "@/lib/pi-session";
+import SignedOut from "@/components/SignedOut";
 
 interface Transaction {
   id: string;
@@ -56,7 +57,7 @@ function formatSource(source: string): string {
 }
 
 export default function WalletPage() {
-  const { user } = useAuth();
+  const { user, status } = useAuth();
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -75,6 +76,24 @@ export default function WalletPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // The fetch above early-returns when nobody is signed in, so setLoading(false)
+  // never ran and this spinner was permanent for every signed-out visitor.
+  if (!user) {
+    if (status === "loading") {
+      return (
+        <div style={{ padding: 16, textAlign: "center", paddingTop: 80, color: "var(--text-secondary)" }}>
+          Loading wallet...
+        </div>
+      );
+    }
+    return (
+      <SignedOut title="Your wallet">
+        Your PPA balance and every transaction behind it, on a ledger you can
+        check. Sign in with Pi to open one.
+      </SignedOut>
+    );
   }
 
   if (loading) {

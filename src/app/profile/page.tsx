@@ -5,6 +5,7 @@ import Link from "next/link";
 import EmblemCard from "@/components/EmblemCard";
 import { TIER_RULES, TIER_ORDER } from "@/lib/ppa/tiers";
 import PrivacySection from "./PrivacySection";
+import SignedOut from "@/components/SignedOut";
 
 const TIER_COLORS: Record<string, string> = {
   NEWCOMER: "#a0a0b8",
@@ -55,13 +56,24 @@ function getStreakMultiplier(streakDays: number): string {
 }
 
 export default function ProfilePage() {
-  const { user, forceReauth, signOut } = useAuth();
+  const { user, status, forceReauth, signOut } = useAuth();
 
+  // Only "loading" is loading. For a signed-out visitor — which, now that the
+  // app opens outside Pi Browser, is most first-time visitors — this said
+  // "Loading profile..." and never stopped.
   if (!user) {
+    if (status === "loading") {
+      return (
+        <div style={{ padding: 16, textAlign: "center", paddingTop: 80, color: "var(--text-secondary)" }}>
+          Loading profile...
+        </div>
+      );
+    }
     return (
-      <div style={{ padding: 16, textAlign: "center", paddingTop: 80, color: "var(--text-secondary)" }}>
-        Loading profile...
-      </div>
+      <SignedOut title="Your profile">
+        Your tier, streak, reputation and emblem live here. Sign in with Pi to
+        start building them — a new account begins with 100 PPA.
+      </SignedOut>
     );
   }
 

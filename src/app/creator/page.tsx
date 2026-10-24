@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { apiFetch } from "@/lib/pi-session";
+import SignedOut from "@/components/SignedOut";
 
 interface CreatorStats {
   totalCreated: number;
@@ -14,7 +15,7 @@ interface CreatorStats {
 }
 
 export default function CreatorPage() {
-  const { user } = useAuth();
+  const { user, status } = useAuth();
   const [stats, setStats] = useState<CreatorStats>({
     totalCreated: 0,
     totalEarned: 0,
@@ -39,6 +40,18 @@ export default function CreatorPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Without this the page rendered its zero-initialised stats to a signed-out
+  // visitor — "0 PPA earned, 0 predictions" presented as their own record,
+  // which is a number the app invented rather than one it knows.
+  if (!user && status !== "loading") {
+    return (
+      <SignedOut title="Creator hub">
+        Write predictions, polls and challenges for other players, and earn PPA
+        when they play them. Sign in with Pi to start publishing.
+      </SignedOut>
+    );
   }
 
   return (
