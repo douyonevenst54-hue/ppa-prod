@@ -29,6 +29,13 @@
     }
   },
   "buildCommand": "next build",
+  "crons": [
+    {
+      "comment": "Builds today's and tomorrow's question sets at 00:05 UTC, so the first player of the day finds them already there instead of building them. The route refuses every request unless CRON_SECRET is set in the environment and matches, which means this entry is inert — returning 401 and nothing else — until that variable exists. Once per day is also the Hobby plan's limit.",
+      "path": "/api/cron/daily-challenge",
+      "schedule": "5 0 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
