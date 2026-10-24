@@ -1,16 +1,23 @@
 # Going to Mainnet without disturbing Testnet
 
-## The constraint that shapes everything
+## What is actually fixed, and what is not
 
 The Developer Portal fixes the network when a project is registered: *"once
 you've registered the app, this option cannot be changed."* PPA's current
 project is Testnet — the Pi directory shows the **Testnet App** badge. So
 Mainnet means a **second Developer Portal project**, not a setting change.
+That part is unavoidable.
 
-And a new project cannot claim a URL another project already holds: the verified
-URL *"cannot match the URL that is verified of another Developer Portal
-Project."* The Testnet project currently holds `pappad.app`. That single fact
-decides the order of the whole migration.
+The URL is not a problem. Pi assigns the Testnet project its own hostname, so
+`pappad.app` is not verified by it and nothing has to be released. The only
+constraint on the domain is Vercel's: `pappad.app` is currently attached to the
+Testnet Vercel project, and a domain can only live on one project at a time. So
+moving it means removing it there and adding it to the Mainnet project, which
+is a short gap in service rather than a sequencing trap.
+
+Confirm which URL the Testnet project actually has verified before relying on
+this — it is one line in the portal, and the whole plan below assumes it is not
+`pappad.app`.
 
 Sources: [Developer Portal docs](https://pi-apps.github.io/pi-sdk-docs/platform/DeveloperPortal),
 [Community Developer Guide](https://pi-apps.github.io/community-developer-guide/docs/gettingStarted/gettingStartedChecklist/).
@@ -45,27 +52,25 @@ calls this out specifically.
 So: one GitHub repo, two Vercel projects pointed at it, two Neon databases, two
 Developer Portal projects, two hostnames.
 
-## The order, and why
+## The order
 
-The URL constraint means Testnet has to let go of `pappad.app` before Mainnet
-can take it. Doing this in the wrong order leaves you unable to verify the
-domain you actually want.
-
-1. **Give Testnet its own hostname.** Add `testnet.pappad.app` in Vercel and
-   point the existing project at it. Keep `pappad.app` resolving for now.
-2. **Re-verify Testnet on the new hostname** in its Developer Portal project
-   (the validation key file moves with it). `pappad.app` is now free.
-3. **Create the Mainnet Developer Portal project.** Select Mainnet at
+1. **Create the Mainnet Developer Portal project.** Select Mainnet at
    registration — this cannot be changed later.
-4. **Verify `pappad.app`** on the Mainnet project.
-5. **Generate the Mainnet API key.** Do not reuse the testnet one.
-6. **New Neon database**, then `npx prisma migrate deploy`.
-7. **New Vercel project** from the same repo, mainnet env, domain `pappad.app`.
-8. **Seed content** (below), then run `scripts/preflight.ts` against it.
+2. **Complete the hosting step**, which is what unlocks the App Wallet step.
+3. **App wallet** (see the open question at the end).
+4. **Generate the Mainnet API key.** Do not reuse the testnet one; the guide
+   warns that payments fail if you do.
+5. **New Neon database**, then `npx prisma migrate deploy`.
+6. **New Vercel project** from the same repo with the mainnet environment.
+   Deploy it on its temporary Vercel URL first and check it works.
+7. **Verify `pappad.app`** on the Mainnet project once the app is answering
+   there.
+8. **Move the domain**: remove `pappad.app` from the Testnet Vercel project,
+   add it to the Mainnet one. Short gap in service — do it deliberately.
+9. **Seed content** (below), then run `scripts/preflight.ts` against it.
 
-Step 2 is the risky one. Until it completes, `pappad.app` is verified by a
-project you are about to repoint — do it when you can watch it, not the night
-before the Summit.
+Nothing here is irreversible except step 1, where the network choice is
+permanent for that project.
 
 ## The Mainnet database starts empty
 
@@ -105,6 +110,39 @@ no way around it — worth knowing before you start, not after.
 
 One mitigation: keep the Testnet app alive and listed rather than deleting it.
 It remains a working demo, and the rating stays where it is.
+
+## A2U is not on the path to Mainnet
+
+App-to-user payments — the app sending Pi to a Pioneer — are not required for a
+Mainnet listing. Nothing in the Developer Portal checklist asks for them, and
+PPA was deliberately stripped of them (`ff91e05`, "Remove dead A2U code").
+
+A2U is the mechanism of redemption, and redemption is the single thing the
+whole compliance position rests on not having. From `src/lib/ppa/policy.ts`:
+
+> No cash-out means no "prize" in the gambling sense, which collapses the
+> consideration + chance + prize analysis for staked predictions. No redeemable
+> stored value materially weakens the argument that the app transmits monetary
+> value under MGL c. 169B.
+
+Those two sentences are load-bearing for: staked predictions being a game
+rather than wagering, PPA not being transmitted monetary value under
+Massachusetts money transmission law, and the Howey analysis staying
+uninteresting. Every surface now agrees with them — `/terms`, the 410 on
+`/api/ppa/redeem`, the staking disclosure, the directory description, the
+footer on the daily challenge screen.
+
+Building A2U would contradict all of it, two weeks before showing the app to
+the Pi ecosystem. It moves away from Mainnet, not toward it.
+
+**The one case that is not redemption** is a refund: returning someone's Pi
+when a top-up fails or is disputed. That is undoing a payment rather than
+cashing out a balance, and it is defensible. It is also narrow, rare, and
+exactly the kind of thing to put in front of the Massachusetts attorney who is
+already going to read `/terms` — not to build first and ask about afterwards.
+
+If redemption itself ever becomes desirable, the order is: counsel, then
+licensing analysis, then code. Not the reverse.
 
 ## The app wallet: unresolved
 
