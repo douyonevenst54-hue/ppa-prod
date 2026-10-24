@@ -8,6 +8,8 @@ import {
   safeReturnTo,
   createOAuthState,
   callbackUrlFor,
+  needsCanonicalHop,
+  canonicalSignInUrl,
 } from "@/lib/pi-oauth";
 
 describe("WEB_SCOPES", () => {
@@ -182,6 +184,76 @@ describe("createOAuthState", () => {
 
   it("contains no dashes, so it survives a URL round trip unencoded", () => {
     expect(createOAuthState()).toMatch(/^[0-9a-f]+$/);
+  });
+});
+
+describe("needsCanonicalHop", () => {
+  it("is false when no canonical origin is configured", () => {
+    // Single-domain deployments keep the old behaviour: sign in where you are.
+    expect(needsCanonicalHop("https://pappad.app", null)).toBe(false);
+    expect(needsCanonicalHop("https://pappad.app", undefined)).toBe(false);
+    expect(needsCanonicalHop("https://pappad.app", "")).toBe(false);
+  });
+
+  it("is false on the canonical origin itself", () => {
+    expect(
+      needsCanonicalHop("https://ppa-prod.vercel.app", "https://ppa-prod.vercel.app"),
+    ).toBe(false);
+  });
+
+  it("is true on another host serving the same app", () => {
+    // The case that exists in production: pappad.app and ppa-prod.vercel.app
+    // serve one deployment, but Pi accepts a redirect only on the second.
+    expect(
+      needsCanonicalHop("https://pappad.app", "https://ppa-prod.vercel.app"),
+    ).toBe(true);
+  });
+
+  it("ignores a trailing slash and case", () => {
+    expect(
+      needsCanonicalHop("https://PPA-Prod.vercel.app", "https://ppa-prod.vercel.app/"),
+    ).toBe(false);
+  });
+
+  it("treats localhost as its own origin", () => {
+    expect(
+      needsCanonicalHop("http://localhost:3000", "https://ppa-prod.vercel.app"),
+    ).toBe(true);
+  });
+});
+
+describe("canonicalSignInUrl", () => {
+  it("keeps the path and flags sign-in", () => {
+    const u = new URL(canonicalSignInUrl("https://ppa-prod.vercel.app", "/challenges"));
+    expect(u.origin).toBe("https://ppa-prod.vercel.app");
+    expect(u.pathname).toBe("/challenges");
+    expect(u.searchParams.get("pi_signin")).toBe("1");
+  });
+
+  it("carries other query parameters across", () => {
+    const u = new URL(
+      canonicalSignInUrl("https://ppa-prod.vercel.app", "/profile", "?tab=privacy"),
+    );
+    expect(u.searchParams.get("tab")).toBe("privacy");
+    expect(u.searchParams.get("pi_signin")).toBe("1");
+  });
+
+  it("does not duplicate the flag if it is already present", () => {
+    const u = new URL(
+      canonicalSignInUrl("https://ppa-prod.vercel.app", "/", "?pi_signin=1&x=2"),
+    );
+    expect(u.searchParams.getAll("pi_signin")).toEqual(["1"]);
+    expect(u.searchParams.get("x")).toBe("2");
+  });
+
+  it("refuses to carry a path pointing at another site", () => {
+    // The path comes from our own location, but it goes through the same
+    // check anyway — an open redirect here would be handed a verified domain.
+    const u = new URL(
+      canonicalSignInUrl("https://ppa-prod.vercel.app", "//evil.example/steal"),
+    );
+    expect(u.origin).toBe("https://ppa-prod.vercel.app");
+    expect(u.pathname).toBe("/");
   });
 });
 

@@ -12,11 +12,28 @@
 import {
   buildAuthorizeUrl,
   callbackUrlFor,
+  canonicalSignInUrl,
   createOAuthState,
+  needsCanonicalHop,
   RETURN_KEY,
   STATE_KEY,
   WEB_SCOPES,
 } from "./pi-oauth";
+
+/**
+ * The origin whose /auth/callback is registered in the Developer Portal —
+ * the project's verified app domain.
+ *
+ * Set it whenever the app answers on more than one host. PPA does:
+ * pappad.app and ppa-prod.vercel.app serve the same deployment, but only the
+ * verified domain may receive the redirect. Unset, sign-in starts wherever
+ * the visitor happens to be, which is right for a single-domain deployment
+ * and silently broken for this one.
+ */
+export function canonicalOrigin(): string | null {
+  const o = process.env.NEXT_PUBLIC_PI_SIGNIN_ORIGIN;
+  return o && o.trim().length > 0 ? o.trim() : null;
+}
 
 /**
  * The Developer Portal issues a client_id only — no secret, because the
@@ -60,6 +77,21 @@ export class WebSignInUnavailableError extends Error {
 export function startWebSignIn(returnTo?: string): void {
   const clientId = piClientId();
   if (!clientId) throw new WebSignInUnavailableError();
+
+  // Wrong host: Pi would reject the authorize request, so go to the host
+  // whose callback is registered and sign in from there. One extra hop, and
+  // the only alternative is a sign-in button that always fails.
+  const canonical = canonicalOrigin();
+  if (needsCanonicalHop(window.location.origin, canonical)) {
+    window.location.assign(
+      canonicalSignInUrl(
+        canonical as string,
+        returnTo ?? window.location.pathname,
+        returnTo ? "" : window.location.search,
+      ),
+    );
+    return;
+  }
 
   const state = createOAuthState();
   const destination =

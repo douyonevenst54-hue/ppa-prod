@@ -9,6 +9,7 @@ import {
   type SessionOrigin,
 } from "@/lib/pi-session";
 import { startWebSignIn, webSignInConfigured } from "@/lib/web-signin";
+import { SIGNIN_FLAG } from "@/lib/pi-oauth";
 
 export interface PPAUser {
   id: string;
@@ -186,6 +187,7 @@ export function usePiAuth() {
       if (!window.Pi) {
         setStatus("public");
         setLoading(false);
+        resumeSignInIfAsked();
         return;
       }
 
@@ -212,6 +214,7 @@ export function usePiAuth() {
       if (!authResult) {
         setStatus("public");
         setLoading(false);
+        resumeSignInIfAsked();
         return;
       }
 
@@ -341,6 +344,32 @@ export function usePiAuth() {
     startWebSignIn();
     return true;
   }, []);
+
+  /**
+   * Finish a sign-in that began on another of our hosts.
+   *
+   * Someone who pressed Sign in on pappad.app was sent here, to the host
+   * whose callback Pi accepts, carrying ?pi_signin=1. Without this they would
+   * arrive at an ordinary page and have to find the button a second time,
+   * which reads as the first press having done nothing.
+   *
+   * The flag is stripped before starting, so a reload or a shared link does
+   * not kick off sign-in again.
+   */
+  function resumeSignInIfAsked() {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get(SIGNIN_FLAG) !== "1") return;
+    if (!webSignInConfigured()) return;
+
+    url.searchParams.delete(SIGNIN_FLAG);
+    try {
+      window.history.replaceState(null, "", url.pathname + url.search);
+    } catch {
+      // Non-fatal; the redirect below leaves this page anyway.
+    }
+    startWebSignIn(url.pathname + url.search);
+  }
 
   const signIn = useCallback(async () => {
   setLoading(true);

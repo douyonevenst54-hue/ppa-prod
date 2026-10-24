@@ -118,11 +118,32 @@ Three consequences worth keeping:
   client ID, its own verified domain and its own redirect URIs. Register the
   Mainnet Vercel URL there; none of this carries across.
 
-### 3. Set the environment variable
+### 3. Set the environment variables
 
 ```
 NEXT_PUBLIC_PI_CLIENT_ID=<the oAuth Client ID>
+NEXT_PUBLIC_PI_SIGNIN_ORIGIN=https://ppa-prod.vercel.app
 ```
+
+The second matters because **PPA answers on more than one host.**
+`pappad.app` and `ppa-prod.vercel.app` serve the same deployment, and Pi
+accepts a redirect only on the verified one. Without this variable, a visitor
+who reaches PPA at `pappad.app` presses Sign in and Pi rejects the request
+before they see a password field — your own domain would be the one place
+sign-in is broken.
+
+With it set, that press sends them to the canonical host carrying
+`?pi_signin=1`, and sign-in begins there on arrival without a second press.
+The flag is stripped immediately, so a reload or a shared link does not start
+sign-in again.
+
+The redirect could not simply be pointed at the canonical host from the wrong
+one: the CSRF state lives in `sessionStorage`, which is per-origin, so a flow
+starting on one host and returning to another finds nothing stored and is
+correctly refused. Weakening that check to smooth over a hosting detail would
+trade the only protection against token injection for tidiness.
+
+Leave it empty for a single-domain deployment.
 
 Leaving it **empty switches web sign-in off**, and the app behaves exactly as
 it did before: Pi Browser only, and no sign-in offered to anyone who cannot

@@ -200,3 +200,65 @@ export function createOAuthState(): string {
 export function callbackUrlFor(origin: string): string {
   return `${origin.replace(/\/$/, "")}/auth/callback`;
 }
+
+/** Query flag that asks the canonical origin to begin sign-in on arrival. */
+export const SIGNIN_FLAG = "pi_signin";
+
+/**
+ * One app, several domains, one registered callback.
+ *
+ * PPA answers on more than one host — `pappad.app` and `ppa-prod.vercel.app`
+ * both serve the same deployment — but Pi accepts redirect URIs on the
+ * project's verified app domain only. Registering a second host is refused
+ * outright:
+ *
+ *   "https://pappadappnpn9819.pinet.com/auth/callback" — host must be
+ *   ppa-prod.vercel.app or a loopback address.
+ *
+ * So a visitor who arrives on any other host cannot complete a sign-in from
+ * there: Pi rejects the authorize request before they reach a password field.
+ *
+ * Nor can the redirect simply be pointed at the canonical host from here. The
+ * CSRF state lives in sessionStorage, which is per-origin, so a flow that
+ * starts on one host and returns to another finds nothing stored and is
+ * correctly refused. Weakening that check to paper over a hosting detail
+ * would be trading the one protection against token injection for tidiness.
+ *
+ * The honest move is to go to the canonical host first and sign in there.
+ */
+export function needsCanonicalHop(
+  currentOrigin: string,
+  canonicalOrigin: string | null | undefined,
+): boolean {
+  if (!canonicalOrigin) return false;
+  return normaliseOrigin(currentOrigin) !== normaliseOrigin(canonicalOrigin);
+}
+
+function normaliseOrigin(origin: string): string {
+  return origin.trim().replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * Where to send someone so they can sign in: the same page on the canonical
+ * host, flagged to begin sign-in on arrival.
+ *
+ * The path is taken from our own location, never from input, and is passed
+ * through safeReturnTo() anyway so this can't be turned into a redirect to
+ * somewhere else.
+ */
+export function canonicalSignInUrl(
+  canonicalOrigin: string,
+  path: string,
+  search = "",
+): string {
+  const base = normaliseOrigin(canonicalOrigin);
+  const safePath = safeReturnTo(path);
+  const url = new URL(base + safePath);
+  if (search) {
+    for (const [k, v] of new URLSearchParams(search)) {
+      if (k !== SIGNIN_FLAG) url.searchParams.set(k, v);
+    }
+  }
+  url.searchParams.set(SIGNIN_FLAG, "1");
+  return url.toString();
+}
