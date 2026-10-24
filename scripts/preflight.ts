@@ -243,10 +243,22 @@ async function run() {
   // ── 13. Tiers are reachable ────────────────────────────────────────────
   const played = await prisma.user.count({ where: { totalChallenges: { gte: 25 } } });
   const promoted = await prisma.user.count({ where: { tier: { not: "NEWCOMER" } } });
+  // The detail line used to end with "run scripts/backfill-tiers.ts" in every
+  // case, including the passing one — so a healthy check printed an
+  // instruction to go and fix something that was not wrong. Only say it when
+  // there is actually someone eligible who has not been promoted.
+  //
+  // `promoted` can exceed `played` legitimately: it counts anyone above
+  // NEWCOMER, and tier also moves on prediction history, while `played`
+  // counts challenge questions only. More promoted than eligible is not a
+  // fault, which is the other reason this should not have read as one.
+  const behind = Math.max(0, played - promoted);
   add("WARN", "Tiers have been awarded", played === 0 || promoted > 0,
     played === 0
       ? "nobody has played 25 questions yet"
-      : `${promoted} promoted of ${played} eligible — run scripts/backfill-tiers.ts`);
+      : behind > 0
+        ? `${promoted} promoted, ${played} eligible — run scripts/backfill-tiers.ts`
+        : `${promoted} promoted, ${played} eligible on challenges alone`);
 
   // ── 14. Secrets that should no longer exist ────────────────────────────
   //
@@ -321,8 +333,10 @@ async function run() {
   if (network !== "mainnet") {
     console.log(`  Still on ${network}. Mainnet is a SECOND Developer Portal project,
   not a setting — the network is fixed when a project is registered. See
-  MAINNET.md for the order, which matters: the Testnet project holds the
-  verified URL and has to release it before a Mainnet project can claim it.
+  MAINNET.md for the order. The Testnet project's verified domain is
+  ppa-prod.vercel.app — Pi says so when you offer it any other redirect host
+  — so give the Mainnet project a DIFFERENT domain rather than releasing
+  that one. Nothing has to be given up for Mainnet to exist.
 
     - Mainnet Developer Portal project created (network chosen at registration,
       and permanent for that project)
