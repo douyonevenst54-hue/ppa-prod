@@ -139,6 +139,13 @@ async function main() {
         ["amount hashed as balanceAfter", hashWith({ ...base, amount: r.balanceAfter ?? 0 })],
       ];
 
+      // A changed identity would break every row at once, so these are worth
+      // trying before concluding anything about this row in particular.
+      variants.push(
+        ["piUserId hashed as the User.id", hashWith({ ...base, piUserId: user.id })],
+        ["piUserId hashed as the username", hashWith({ ...base, piUserId: user.username })],
+      );
+
       const hit = variants.filter(([, h]) => h === r.rowHash);
       console.log("");
       if (hit.length > 0) {
@@ -156,8 +163,59 @@ async function main() {
       }
     }
 
-    console.log(`\n  Rows after this one are not checked: verification stops at the`);
-    console.log(`  first break, so a later row could be fine or could be worse.\n`);
+    // ── IS IT THIS ROW, OR IS IT ALL OF THEM? ──────────────────────────
+    //
+    // verifyUserChain stops at the first break, which hides the one fact
+    // that decides what to do next. Each row is now re-checked against its
+    // OWN stored prevHash, independently of the chain, and the count says
+    // which kind of fault this is:
+    //
+    //   every row fails  → an input shared by all of them changed after the
+    //                      rows were written. piUserId is the only such
+    //                      input, and /api/auth/pi has a branch that
+    //                      rewrites it when a legacy row is claimed by a Pi
+    //                      identity. That path would silently invalidate
+    //                      every hash a user has.
+    //
+    //   one row fails    → something happened to that row alone.
+    //
+    // The repair is the same either way, but the cause is not, and
+    // re-anchoring without fixing a cause that can fire again is just
+    // scheduling the next break.
+    let independentlyOk = 0;
+    const failures: number[] = [];
+    for (let j = 0; j < rows.length; j++) {
+      const q = rows[j];
+      const h = hashWith({
+        prevHash: q.prevHash ?? ZERO_HASH,
+        piUserId: user.piUserId,
+        amount: q.amount,
+        type: String(q.type),
+        source: String(q.source),
+        balanceAfter: q.balanceAfter ?? 0,
+        createdAtIso: q.createdAt.toISOString(),
+        idempotencyKey: q.idempotencyKey ?? null,
+      });
+      if (h === q.rowHash) independentlyOk++;
+      else failures.push(j);
+    }
+
+    console.log(`\n  Checking every row against its own stored prevHash:`);
+    console.log(`    ${independentlyOk} of ${rows.length} rows hash correctly on their own.`);
+    if (failures.length === rows.length) {
+      console.log(`\n    EVERY row fails. That is not damage to one row — it is an input`);
+      console.log(`    shared by all of them changing after they were written. piUserId`);
+      console.log(`    is the only such input, and /api/auth/pi rewrites it when a legacy`);
+      console.log(`    row is claimed by a Pi identity. Re-anchoring alone would leave`);
+      console.log(`    that path free to do it again.`);
+    } else if (failures.length === 1) {
+      console.log(`\n    Only row ${failures[0]} fails, so the cause is local to that row`);
+      console.log(`    rather than something that changed for the whole account.`);
+    } else {
+      console.log(`\n    Rows failing: ${failures.join(", ")}`);
+    }
+
+    console.log("");
     return;
   }
 
