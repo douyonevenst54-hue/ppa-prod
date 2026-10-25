@@ -23,6 +23,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { award } from "@/lib/ppa/award";
+import { rebaselineChainTx } from "@/lib/ledger";
+import type { Prisma } from "@prisma/client";
 
 const PI_ME_ENDPOINT = "https://api.minepi.com/v2/me";
 
@@ -129,10 +131,49 @@ export async function POST(req: NextRequest) {
       // rows can exist that were never a real Pi account. That bridge no longer
       // creates users, so this path should stop firing — if these log lines
       // keep appearing months from now, something is still minting accounts.
-      user = await prisma.user.update({
-        where: { id: byUsername.id },
-        data: { piUserId, lastActiveDate: new Date() },
+      // ── CHANGING piUserId BREAKS EVERY HASH THIS USER HAS ──────────────
+      //
+      // Each row's hash commits to the piUserId, which is what stops a row
+      // being lifted from one account into another. It also means piUserId
+      // is the one hash input not stored on the row, so rewriting it
+      // invalidates the whole chain at once — silently, with no error here
+      // and nothing wrong on any screen.
+      //
+      // That is exactly what this branch did. It was found weeks later by
+      // preflight, as "1 broken", on an account whose 27 rows then failed
+      // 27 times over. Re-anchoring the chain in the same transaction is
+      // what keeps the ledger verifiable across the change; doing it
+      // afterwards by hand means every future claim starts the same clock.
+      //
+      // The old rows keep their amounts, types, sources and timestamps and
+      // lose only a linkage that stopped meaning anything the moment the
+      // identity moved.
+      const previousPiUserId = byUsername.piUserId;
+      user = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const locked = await tx.user.update({
+          where: { id: byUsername.id },
+          data: { piUserId, lastActiveDate: new Date() },
+        });
+
+        const chained = await tx.pPATransaction.count({
+          where: { userId: locked.id, rowHash: { not: null } },
+        });
+        if (chained > 0) {
+          const { cleared } = await rebaselineChainTx(
+            tx,
+            { id: locked.id, ppaBalance: locked.ppaBalance },
+            piUserId,
+            "rebaseline:piuserid_changed",
+          );
+          console.warn(
+            `[auth/pi] piUserId changed on user ${locked.id} ` +
+              `(${previousPiUserId ?? "null"} -> ${piUserId}); rebaselined ` +
+              `${cleared} chained row(s) at balance ${locked.ppaBalance}`,
+          );
+        }
+        return locked;
       });
+
       console.log(
         `[auth/pi] migrated legacy user ${byUsername.id} to piUserId ${piUserId} ` +
           `(balance ${byUsername.ppaBalance} carried over)`

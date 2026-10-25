@@ -42,6 +42,20 @@ import { appendLedgerEntry, verifyUserChain, computeRowHash } from "../src/lib/l
 
 const prisma = new PrismaClient();
 const APPLY = process.argv.includes("--apply");
+
+/**
+ * Re-anchor a chain whose rows fail on hash, not on balance.
+ *
+ * Deliberately not part of --apply. A hash mismatch means the stored hash
+ * disagrees with what the row's own fields produce, and "repair" and "quietly
+ * make the ledger agree with itself" are the same keystrokes. Requiring a
+ * second, uglier flag means nobody does it without having decided to.
+ *
+ * Run scripts/diagnose-chain.ts <username> first — it names the input that
+ * changed. On douyonevenst54 that was piUserId, rewritten by the legacy-claim
+ * branch in /api/auth/pi, which is now fixed to rebaseline as it goes.
+ */
+const REBASELINE_HASH = process.argv.includes("--rebaseline-hash-mismatch");
 const ZERO_HASH = "0".repeat(64);
 
 type Problem =
@@ -188,8 +202,19 @@ async function main() {
       } else if (p.kind === "rowAfter") {
         const cleared = await rebaseline(p.piUserId);
         console.log(`  ${p.username.padEnd(18)} rebaselined (${cleared} row(s) unlinked, kept as history)`);
+      } else if (REBASELINE_HASH) {
+        // Only on an explicit flag. A hash mismatch is the one fault where
+        // the repair and a cover-up look identical from the outside, so it
+        // should never happen as a side effect of running the usual command.
+        const cleared = await rebaseline(p.piUserId);
+        console.log(
+          `  ${p.username.padEnd(18)} rebaselined after hash mismatch ` +
+            `(${cleared} row(s) unlinked, kept as history)`,
+        );
       } else {
-        console.log(`  ${p.username.padEnd(18)} SKIPPED — hash mismatch needs manual review`);
+        console.log(`  ${p.username.padEnd(18)} SKIPPED — hash mismatch`);
+        console.log(`  ${" ".repeat(18)} diagnose first:  scripts/diagnose-chain.ts ${p.username}`);
+        console.log(`  ${" ".repeat(18)} then, if understood:  --apply --rebaseline-hash-mismatch`);
       }
     } catch (err) {
       console.error(`  ${p.username.padEnd(18)} FAILED — ${(err as Error).message}`);

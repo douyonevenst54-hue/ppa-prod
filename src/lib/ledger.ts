@@ -166,6 +166,73 @@ async function createSnapshotTx(
 }
 
 /**
+ * Close a user's chain and open a new one at their current balance.
+ *
+ * ── WHEN THIS IS THE RIGHT ANSWER ─────────────────────────────────────────
+ *
+ * Every row's hash commits to the user's `piUserId`. That is deliberate — it
+ * is what stops a row being lifted from one account into another. It also
+ * means piUserId is the one hash input that does not live on the row, so if
+ * it ever changes, every hash the user has ever had stops verifying at once.
+ *
+ * That happened: douyonevenst54's chain failed with 0 of 27 rows hashing
+ * correctly on their own, which is not damage to a row — it is the identity
+ * underneath the chain being re-pointed. /api/auth/pi rewrites piUserId when
+ * a legacy row is claimed by a Pi identity, and did so silently.
+ *
+ * The honest repair is not to recompute the old hashes so they agree again:
+ * that would mean a ledger which re-signs whatever it finds, which is worth
+ * less than no ledger at all because it looks like proof. Instead the old
+ * rows keep their amounts, types, sources and timestamps and lose only their
+ * linkage — which was already unverifiable — and a fresh genesis snapshot
+ * records the true balance under the new identity.
+ *
+ * `source` should say why, so the ledger itself carries the reason rather
+ * than leaving it in a commit message.
+ *
+ * Caller must already hold the row lock on the user.
+ */
+export async function rebaselineChainTx(
+  tx: Prisma.TransactionClient,
+  user: { id: string; ppaBalance: number },
+  piUserId: string,
+  source: string,
+): Promise<{ cleared: number; rowHash: string }> {
+  const cleared = await tx.pPATransaction.updateMany({
+    where: { userId: user.id, rowHash: { not: null } },
+    data: { prevHash: null, rowHash: null, isSnapshot: false },
+  });
+
+  const createdAt = new Date();
+  const rowHash = computeRowHash({
+    prevHash: ZERO_HASH,
+    piUserId,
+    amount: user.ppaBalance,
+    type: "snapshot",
+    source,
+    balanceAfter: user.ppaBalance,
+    createdAtIso: createdAt.toISOString(),
+    idempotencyKey: null,
+  });
+
+  await tx.pPATransaction.create({
+    data: {
+      userId: user.id,
+      amount: user.ppaBalance,
+      type: "snapshot",
+      source,
+      balanceAfter: user.ppaBalance,
+      prevHash: ZERO_HASH,
+      rowHash,
+      isSnapshot: true,
+      createdAt,
+    },
+  });
+
+  return { cleared: cleared.count, rowHash };
+}
+
+/**
  * The append, inside a transaction the caller controls.
  *
  * Exported so the emission gate can run cap accounting and the balance write
