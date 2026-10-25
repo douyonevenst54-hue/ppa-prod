@@ -99,14 +99,57 @@ async function run() {
     broken === 0 ? `${users.length}/${users.length} verified` : `${broken} broken — run reconcile-drift.ts`);
 
   // ── 2. Nothing writing outside the gate ────────────────────────────────
-  // Any ledger row without a hash was written by a path that bypassed
-  // appendLedgerEntry. Recent ones mean a live bypass, not history.
+  //
+  // A ledger row without a hash was written by a path that bypassed
+  // appendLedgerEntry — OR it is an older row that a rebaseline deliberately
+  // unlinked, which is not the same thing at all.
+  //
+  // This check counted both, and the first time a rebaseline ran it turned
+  // the repair into a blocker: 27 rows were unlinked, two of them earned
+  // that same day, and preflight reported "2 rows bypassed the ledger — find
+  // the write path" for a write path that had behaved perfectly.
+  //
+  // The distinction is the current genesis snapshot. A rebaseline writes its
+  // snapshot at the moment it runs, so everything it unlinked is OLDER than
+  // that snapshot. A row that genuinely skipped the gate is NEWER. Rows
+  // before the current genesis are history; rows after it are a live bypass.
+  interface UnhashedRow { id: string; userId: string; createdAt: Date }
+  interface SnapshotRow { userId: string; createdAt: Date }
+
   const since = new Date(Date.now() - 24 * 3600 * 1000);
-  const unchained = await prisma.pPATransaction.count({
+  const recentUnhashed = (await prisma.pPATransaction.findMany({
     where: { rowHash: null, createdAt: { gt: since } },
+    select: { id: true, userId: true, createdAt: true },
+  })) as UnhashedRow[];
+
+  const genesisAt = new Map<string, Date>();
+  if (recentUnhashed.length > 0) {
+    const snapshots = (await prisma.pPATransaction.findMany({
+      where: {
+        isSnapshot: true,
+        userId: { in: [...new Set(recentUnhashed.map((r: UnhashedRow) => r.userId))] },
+      },
+      select: { userId: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+    })) as SnapshotRow[];
+    for (const s of snapshots) {
+      if (!genesisAt.has(s.userId)) genesisAt.set(s.userId, s.createdAt);
+    }
+  }
+
+  // No snapshot at all and no hash is a bypass: nothing ever anchored it.
+  const bypassed = recentUnhashed.filter((r: UnhashedRow) => {
+    const g = genesisAt.get(r.userId);
+    return !g || r.createdAt > g;
   });
-  add("BLOCK", "No unchained writes in 24h", unchained === 0,
-    unchained === 0 ? "clean" : `${unchained} rows bypassed the ledger — find the write path`);
+  const unlinkedByRepair = recentUnhashed.length - bypassed.length;
+
+  add("BLOCK", "No unchained writes in 24h", bypassed.length === 0,
+    bypassed.length === 0
+      ? unlinkedByRepair > 0
+        ? `clean (${unlinkedByRepair} older row(s) unlinked by a rebaseline, kept as history)`
+        : "clean"
+      : `${bypassed.length} row(s) bypassed the ledger — find the write path`);
 
   // ── 3. Redemption is actually off ──────────────────────────────────────
   const redeemAttempts = await prisma.redemptionAttempt.count({
