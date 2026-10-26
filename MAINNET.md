@@ -35,6 +35,63 @@ Sources: [Developer Portal docs](https://pi-apps.github.io/pi-sdk-docs/platform/
 [Community Developer Guide](https://pi-apps.github.io/community-developer-guide/docs/gettingStarted/gettingStartedChecklist/).
 Pi's process changes; your own Developer Portal checklist is authoritative.
 
+## The Mainnet project should be registered on pappad.app
+
+Pi's registration page states it plainly:
+
+> It is required that you own the domain of the URL that you provide! You will
+> be asked to verify its ownership.
+
+`pappad.app` is owned. `ppa-prod.vercel.app` is a subdomain of Vercel's domain,
+which is not. The Testnet project has it verified — the ownership check is
+satisfied by serving a file, which any Vercel subdomain lets you do — but that
+is the weaker claim of the two, and the Mainnet project is the one that will
+carry real Pi.
+
+So: **register the Mainnet project on `https://pappad.app`.** Nothing has to
+be released, because the Testnet project keeps `ppa-prod.vercel.app`.
+
+Verification should pass immediately: `public/validation-key.txt` and
+`public/.well-known/pi.toml` are already served at the root of whatever host
+the app answers on, and `pappad.app` already serves this deployment.
+
+This also settles the web sign-in configuration for Mainnet, which follows the
+verified domain and nothing else:
+
+```
+NEXT_PUBLIC_PI_SIGNIN_ORIGIN=https://pappad.app
+```
+
+and `https://pappad.app/auth/callback` registered as the Mainnet project's
+Redirect URI. See WEB-SIGNIN.md for why the host cannot be anything else.
+
+## The API does not change between networks
+
+Worth stating because it looks like it should. Both networks use the same host
+and the same paths:
+
+| Call | Endpoint | Auth |
+| --- | --- | --- |
+| Identity | `GET api.minepi.com/v2/me` | `Bearer <the player's token>` |
+| Read a payment | `GET api.minepi.com/v2/payments/{id}` | `Key <PI_API_KEY>` |
+| Approve | `POST …/payments/{id}/approve` | `Key <PI_API_KEY>` |
+| Complete | `POST …/payments/{id}/complete` | `Key <PI_API_KEY>` |
+
+Pi's own wording for why: *"The selected blockchain will direct where API and
+SDK calls hit."* The project the key belongs to decides the chain, not the URL
+being called. So the Mainnet switch is a key and an environment variable, not
+a code change — and a testnet key left in a mainnet deployment reaches the
+wrong chain while looking entirely healthy.
+
+`NEXT_PUBLIC_PI_NETWORK` drives only the TEST-PI badge and the policy flag. It
+does not route anything.
+
+**Sandbox needs no change.** `NEXT_PUBLIC_PI_SANDBOX` is read in four places,
+all as `=== "true"`, so anything other than that exact string is off. It is set
+on Vercel's Development environment only, which is correct: sandbox exists to
+let a browser outside Pi Browser reach the SDK during development, and
+production has never had it.
+
 ## One repository, two deployments
 
 Do **not** fork the repo.
@@ -66,8 +123,11 @@ Developer Portal projects, two hostnames.
 
 ## The order
 
-1. **Create the Mainnet Developer Portal project.** Select Mainnet at
-   registration — this cannot be changed later.
+1. **Create the Mainnet Developer Portal project** with the URL
+   `https://pappad.app`, the domain that is actually owned. Select Mainnet at
+   registration — this cannot be changed later. Ownership is verified by a
+   file already served there, so this passes while `pappad.app` is still
+   pointed at the Testnet Vercel project; the domain moves at step 8.
 2. **Complete the hosting step**, which is what unlocks the App Wallet step.
 3. **App wallet** (see the open question at the end).
 4. **Generate the Mainnet API key.** Do not reuse the testnet one; the guide
@@ -75,24 +135,36 @@ Developer Portal projects, two hostnames.
 5. **New Neon database**, then `npx prisma migrate deploy`.
 6. **New Vercel project** from the same repo with the mainnet environment.
    Deploy it on its temporary Vercel URL first and check it works.
-7. **Verify `pappad.app`** on the Mainnet project once the app is answering
-   there.
+7. **Register the Redirect URI** `https://pappad.app/auth/callback` on the
+   Mainnet project, and put that project's client ID in
+   `NEXT_PUBLIC_PI_CLIENT_ID` with
+   `NEXT_PUBLIC_PI_SIGNIN_ORIGIN=https://pappad.app`.
 8. **Move the domain**: remove `pappad.app` from the Testnet Vercel project,
-   add it to the Mainnet one. Short gap in service — do it deliberately.
+   add it to the Mainnet one. Short gap in service — do it deliberately. From
+   this point the Testnet app answers on `ppa-prod.vercel.app` alone, which is
+   still its own verified domain, so nothing there breaks.
 9. **Seed content** (below), then run `scripts/preflight.ts` against it.
 
 Nothing here is irreversible except step 1, where the network choice is
 permanent for that project.
 
-**Pi Sign-In needs no Redirect URI.** The portal shows an oAuth Client ID and
-"No redirect URIs configured yet", which looks like an unfinished step and is
-not one. That client ID is for the OAuth implicit flow, used when a site signs
-a Pioneer in from *outside* Pi Browser. PPA does not use it: every session comes
-from `window.Pi.authenticate()` in the Pi SDK (`src/hooks/usePiAuth.ts`,
-`src/lib/pi-session.ts`), and the server validates the returned access token
-against Pi with `PI_API_KEY` (`resolvePiUserId` in `src/lib/auth.ts`). No
-`client_id` or `redirect_uri` appears anywhere in the codebase. Leave it empty
-on both projects unless PPA is ever opened to browsers other than Pi's.
+**Pi Sign-In DOES need a Redirect URI now.** This section used to say the
+opposite — "PPA does not use it... leave it empty on both projects" — written
+before web sign-in existed, and wrong on a second count too: identity is
+resolved by sending the *player's* token to `/v2/me` as a Bearer token, which
+needs no app key at all. `PI_API_KEY` authorises server-to-server payment
+calls and nothing about signing in.
+
+On the Mainnet project, register:
+
+```
+https://pappad.app/auth/callback
+```
+
+and set `NEXT_PUBLIC_PI_CLIENT_ID` to that project's own oAuth Client ID,
+which is not the Testnet one. Pi accepts a redirect only on the project's
+verified domain plus loopback, so this has to match the domain registered in
+step 1. WEB-SIGNIN.md has the rest.
 
 ## The listing fields
 
